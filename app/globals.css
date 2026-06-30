@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --paper: #fff7e6;
+  --gold: #caa96e;
+  --ink: #1d2218;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background: #f5efd9;
+  font-family: "Noto Serif SC", "Songti SC", "Microsoft YaHei", serif;
+  overflow-x: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+canvas {
+  display: block;
+}
+
+::selection {
+  color: #fff7e6;
+  background: #5f744e;
+}
+
+.glass-panel {
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(255, 247, 230, 0.28)),
+    rgba(255, 255, 255, 0.2);
+  box-shadow: 0 28px 90px rgba(58, 74, 43, 0.18);
+  backdrop-filter: blur(22px);
+}
+
+.dark-glass {
+  border: 1px solid rgba(255, 247, 230, 0.24);
+  background:
+    linear-gradient(145deg, rgba(45, 55, 34, 0.7), rgba(26, 34, 23, 0.44)),
+    rgba(31, 42, 25, 0.42);
+  box-shadow: 0 28px 90px rgba(31, 43, 24, 0.24);
+  backdrop-filter: blur(22px);
+}
+
+.music-spin {
+  animation: musicSpin 5.5s linear infinite;
+}
+
+.string-glow {
+  animation: stringGlow 2.8s ease-in-out infinite;
+}
+
+@keyframes musicSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes stringGlow {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: translateX(-8%);
+  }
+  50% {
+    opacity: 0.88;
+    transform: translateX(8%);
+  }
+}
