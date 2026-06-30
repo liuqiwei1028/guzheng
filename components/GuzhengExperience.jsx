@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Download, FileDown, ImageDown, Music2, Sparkles, UploadCloud, Volume2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight, ImageDown, Music2, Sparkles, UploadCloud, Volume2 } from "lucide-react";
 import {
+  MAX_ANALYSIS_SECONDS,
+  SEGMENT_SECONDS,
+  analyzeSegments,
   assessGuzhengLikelihood,
   buildRejectedReport,
   buildReport,
@@ -30,8 +33,13 @@ const initialReport = {
   weaknesses: ["等待音频进入分析。"],
   styleFit: "系统会根据清亮度、厚度、爆发力与尾音判断适合曲风。",
   spectrumSummary: "等待频谱分析",
+  spectrumDetail: "完成分析后，这里会显示频段比例、频谱重心和分段变化。",
   spectrumLabel: "未载入",
   guzhengConfidence: "--",
+  analyzedDuration: "--",
+  originalDuration: "--",
+  wasTrimmed: false,
+  segmentAnalyses: [],
   deepseekContext: null,
 };
 
@@ -45,6 +53,10 @@ export default function GuzhengExperience() {
   const [aiSource, setAiSource] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [introVisible, setIntroVisible] = useState(true);
+  const [introLeaving, setIntroLeaving] = useState(false);
+  const [activeSection, setActiveSection] = useState("");
+  const [aiReportReady, setAiReportReady] = useState(false);
   const [isMusicPlaying, setIsMusicPlaying] = useState(true);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [waveform, setWaveform] = useState(null);
@@ -56,8 +68,20 @@ export default function GuzhengExperience() {
   const musicRef = useRef(null);
   const playerRef = useRef(null);
   const uploadInputRef = useRef(null);
+  const reportSectionRef = useRef(null);
   const reportCardRef = useRef(null);
   const aiReportRef = useRef(null);
+  const introFinishedRef = useRef(false);
+  const introExitTimerRef = useRef(null);
+
+  const finishIntro = useCallback(() => {
+    if (introFinishedRef.current) return;
+    introFinishedRef.current = true;
+    setIntroLeaving(true);
+    introExitTimerRef.current = window.setTimeout(() => {
+      setIntroVisible(false);
+    }, 1100);
+  }, []);
 
   useEffect(() => {
     const audio = musicRef.current;
@@ -87,8 +111,8 @@ export default function GuzhengExperience() {
           if (!response.ok) continue;
           const buffer = await response.arrayBuffer();
           const decoded = await context.decodeAudioData(buffer.slice(0));
-          const mono = mixToMono(decoded);
-          const features = extractFeatures(mono.samples, mono.sampleRate, decoded.duration);
+          const mono = mixToMono(decoded, MAX_ANALYSIS_SECONDS);
+          const features = extractFeatures(mono.samples, mono.sampleRate, mono.duration);
           profiles.push(createReferenceProfile(features, sample));
         }
         if (!cancelled) setReferenceProfiles(profiles);
@@ -102,9 +126,40 @@ export default function GuzhengExperience() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (introExitTimerRef.current) window.clearTimeout(introExitTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const sectionIds = ["lab", "samples", "report"];
+    const updateActiveSection = () => {
+      const anchor = window.innerHeight * 0.34;
+      const current = sectionIds.reduce((active, id) => {
+        const element = document.getElementById(id);
+        if (!element) return active;
+        return element.getBoundingClientRect().top <= anchor ? id : active;
+      }, "");
+      setActiveSection(current);
+    };
+    updateActiveSection();
+    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    window.addEventListener("resize", updateActiveSection);
+    return () => {
+      window.removeEventListener("scroll", updateActiveSection);
+      window.removeEventListener("resize", updateActiveSection);
+    };
+  }, []);
+
   const scoreStyle = useMemo(() => ({ "--score": `${Number(report.score) || 0}%` }), [report.score]);
   const formattedAiReport = useMemo(() => formatAiReport(aiReport), [aiReport]);
   const canExport = report.score !== "--";
+  const canGenerateAi = Boolean(report.deepseekContext && report.score !== "--");
+  const navLinkClass = (id) =>
+    `rounded-full px-3 py-1.5 transition ${
+      activeSection === id ? "bg-[#5d7048]/90 text-white shadow-soft" : "hover:bg-white/42 hover:text-[#8a6d35]"
+    }`;
 
   async function ensureAudioContext({ resume = false } = {}) {
     if (!audioContextRef.current) {
@@ -123,11 +178,13 @@ export default function GuzhengExperience() {
       setAiReport("AI 正在等待古筝音色预检结果。");
       setAiSource("");
       setReportImageUrl("");
+      setAiReportReady(false);
 
       const context = await ensureAudioContext({ resume: true });
       const decoded = await context.decodeAudioData(arrayBuffer.slice(0));
-      const mono = mixToMono(decoded);
-      const features = extractFeatures(mono.samples, mono.sampleRate, decoded.duration);
+      const mono = mixToMono(decoded, MAX_ANALYSIS_SECONDS);
+      const features = extractFeatures(mono.samples, mono.sampleRate, mono.duration);
+      const segmentAnalyses = analyzeSegments(mono.samples, mono.sampleRate, mono.duration, SEGMENT_SECONDS);
       const guzhengCheck = assessGuzhengLikelihood(features, referenceProfiles);
 
       setWaveform({ waveform: features.waveform, envelope: features.envelope });
@@ -136,18 +193,30 @@ export default function GuzhengExperience() {
       if (!sampleMeta && !guzhengCheck.isGuzheng) {
         const rejected = buildRejectedReport(sourceName, guzhengCheck);
         setReport(rejected);
-        setStatus(`未通过古筝音色预检，置信度 ${guzhengCheck.score}/100。`);
+        setStatus(`未通过古筝音色预检，置信度 ${guzhengCheck.score}/100。${mono.wasTrimmed ? "已仅检测前 60 秒。" : ""}`);
         setFileState("未评分");
         setAiReport("这段音频未通过古筝声音预检，因此不会生成正式评分。建议上传古筝独奏、少混响、少环境噪声的音频。");
         setAiSource("AI 预检");
+        scrollToReport();
         return;
       }
 
-      const nextReport = buildReport(features, sourceName, sampleMeta, guzhengCheck);
+      const nextReport = buildReport(features, sourceName, sampleMeta, guzhengCheck, {
+        segmentAnalyses,
+        analyzedDuration: mono.duration,
+        originalDuration: mono.originalDuration,
+        wasTrimmed: mono.wasTrimmed,
+      });
       setReport(nextReport);
-      setStatus(`分析完成，古筝置信度 ${nextReport.guzhengConfidence}/100。`);
+      setStatus(
+        `分析完成，古筝置信度 ${nextReport.guzhengConfidence}/100。已按 ${SEGMENT_SECONDS} 秒分段，${
+          mono.wasTrimmed ? "仅取前 60 秒分析。" : "已覆盖全部有效音频。"
+        }`,
+      );
       setFileState("已完成");
-      await requestAiReport(nextReport.deepseekContext);
+      setAiReport("基础音色分析已完成。点击“生成 AI 报告”后，将调用 AI 生成更完整的具体分析结论。");
+      setAiSource("等待生成");
+      scrollToReport();
       setTimeout(() => refreshReportImage(false), 180);
     } catch (error) {
       console.error(error);
@@ -159,6 +228,7 @@ export default function GuzhengExperience() {
   async function requestAiReport(context) {
     if (!context) return;
     setIsAiLoading(true);
+    setAiReportReady(false);
     try {
       const response = await fetch("/api/deepseek", {
         method: "POST",
@@ -166,14 +236,34 @@ export default function GuzhengExperience() {
         body: JSON.stringify({ context }),
       });
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || `AI 请求失败：HTTP ${response.status}`);
+      }
       setAiReport(data.report || "AI 未返回报告，已保留基础分析结果。");
       setAiSource(data.source === "deepseek" ? "AI API" : "本地专业兜底");
+      return true;
     } catch (error) {
       setAiReport(`详细报告暂未生成：${error.message}`);
       setAiSource("请求失败");
+      return false;
     } finally {
       setIsAiLoading(false);
     }
+  }
+
+  function scrollToReport() {
+    setTimeout(() => {
+      reportSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+  }
+
+  async function generateAiReport() {
+    if (!report.deepseekContext) return;
+    const generated = await requestAiReport(report.deepseekContext);
+    if (!generated) return;
+    await nextFrame();
+    await refreshReportImage(false);
+    setAiReportReady(true);
   }
 
   async function handleUserFile(file) {
@@ -250,56 +340,14 @@ export default function GuzhengExperience() {
     }
   }
 
-  async function exportAiPdf() {
-    if (!aiReportRef.current) return;
-    setIsExporting(true);
-    try {
-      const { toPng } = await import("html-to-image");
-      const { jsPDF } = await import("jspdf");
-      const image = await refreshReportImage(false);
-      await new Promise((resolve) => setTimeout(resolve, image ? 240 : 0));
-      const dataUrl = await toPng(aiReportRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: "#f6edda",
-      });
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const img = await loadImage(dataUrl);
-      const width = pageWidth;
-      const height = (img.height * width) / img.width;
-      if (height <= pageHeight) {
-        pdf.addImage(dataUrl, "PNG", 0, 0, width, height);
-      } else {
-        let rendered = 0;
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        const sliceHeightPx = Math.floor((img.width * pageHeight) / pageWidth);
-        canvas.width = img.width;
-        canvas.height = sliceHeightPx;
-        while (rendered < img.height) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = "#f6edda";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, rendered, img.width, sliceHeightPx, 0, 0, img.width, sliceHeightPx);
-          const pageData = canvas.toDataURL("image/png");
-          if (rendered > 0) pdf.addPage();
-          pdf.addImage(pageData, "PNG", 0, 0, pageWidth, pageHeight);
-          rendered += sliceHeightPx;
-        }
-      }
-      pdf.save(`AI古筝音色详细报告-${Date.now()}.pdf`);
-    } finally {
-      setIsExporting(false);
-    }
-  }
-
   return (
     <main className="min-h-screen overflow-hidden bg-[#f5efd9] text-ink">
       <audio ref={musicRef} src="/bg-music.flac" preload="metadata" />
+      {introVisible ? <IntroOverlay leaving={introLeaving} onDone={finishIntro} /> : null}
 
-      <header className="fixed left-0 right-0 top-0 z-40 flex items-center justify-between px-5 py-5 md:px-10">
+      <header
+        className="fixed left-0 right-0 top-0 z-40 flex items-center justify-between px-5 py-5 transition duration-500 md:px-10"
+      >
         <button
           type="button"
           onClick={toggleMusic}
@@ -311,39 +359,57 @@ export default function GuzhengExperience() {
             <Music2 className="h-7 w-7" strokeWidth={1.8} />
           </span>
         </button>
-        <nav className="hidden items-center gap-8 rounded-full border border-white/50 bg-white/25 px-6 py-3 text-sm text-[#3e4e34] shadow-soft backdrop-blur-xl md:flex">
-          <a href="#lab" className="transition hover:text-[#8a6d35]">
+        <nav className="hidden items-center gap-3 rounded-full border border-white/50 bg-white/25 px-4 py-2 text-sm text-[#3e4e34] shadow-soft backdrop-blur-xl md:flex">
+          <a href="#lab" className={navLinkClass("lab")}>
             听音识色
           </a>
-          <a href="#samples" className="transition hover:text-[#8a6d35]">
+          <a href="#samples" className={navLinkClass("samples")}>
             名琴声档
           </a>
-          <a href="#report" className="transition hover:text-[#8a6d35]">
+          <a href="#report" className={navLinkClass("report")}>
             AI 报告
           </a>
         </nav>
       </header>
 
-      <section className="relative min-h-[92vh] overflow-hidden">
-        <div className="absolute inset-0 bg-[url('/hero-bg.png')] bg-cover bg-[42%_center] md:bg-center" />
-        <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-white/0 to-[#f5efd9]" />
-        <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/0 to-white/18" />
+      <section className="relative min-h-[100svh] overflow-hidden">
+        <div className="absolute inset-0 bg-[url('/hero-bg.png')] bg-cover bg-[38%_center] md:bg-center" />
+        <video
+          className="absolute inset-0 h-full w-full object-cover"
+          src="/bg.mp4"
+          poster="/hero-bg.png"
+          muted
+          playsInline
+          autoPlay
+          loop
+          preload="auto"
+          aria-hidden="true"
+        />
+        <div className="hero-breathe absolute inset-0 bg-gradient-to-b from-white/18 via-white/0 to-[#f5efd9]" />
+        <div className="absolute inset-y-0 right-0 w-[68vw] bg-gradient-to-l from-[#142014]/72 via-[#213018]/34 to-transparent" />
+        <div className="hero-mist absolute inset-x-[-12%] top-[13%] h-40 bg-gradient-to-r from-transparent via-white/34 to-transparent blur-2xl" />
+        <div className="hero-water absolute bottom-[12%] left-0 right-0 h-28 bg-[linear-gradient(180deg,transparent,rgba(245,239,217,.18)),repeating-linear-gradient(0deg,rgba(255,250,236,.34)_0_1px,transparent_1px_13px)]" />
+        <div className="hero-light-sweep absolute inset-y-0 right-[-12%] w-[48vw] bg-gradient-to-l from-white/36 via-white/12 to-transparent" />
         <MountainAnimation />
         <div className="pointer-events-none absolute bottom-[18%] left-[13%] right-[36%] hidden h-px overflow-hidden md:block">
           <div className="string-glow h-px w-full bg-gradient-to-r from-transparent via-[#fff3c5] to-transparent" />
         </div>
 
-        <div className="relative z-10 flex min-h-[92vh] items-center justify-center px-5 pt-20 md:justify-end md:px-[9vw]">
-          <div className="mt-20 w-full max-w-[500px] text-center md:mt-6">
-            <p className="mb-5 text-sm uppercase text-[#9a7b3d]">Guzheng Timbre Intelligence</p>
-            <h1 className="sr-only">天籁之音 古筝 AI 音色鉴赏</h1>
-            <p className="mx-auto max-w-[420px] text-[18px] leading-9 text-[#35402d] drop-shadow-sm md:text-[20px]">
+        <div className="relative z-10 flex min-h-[100svh] items-center justify-center px-5 pb-14 pt-24 md:justify-end md:px-[9vw] md:pb-20">
+          <div className="w-full max-w-[500px] text-center md:mt-4">
+            <p className="hero-copy-glow mb-4 text-sm uppercase tracking-[0.18em] text-[#f3d78c]">
+              Guzheng Timbre Intelligence
+            </p>
+            <h1 className="hero-title-glow mx-auto max-w-[520px] text-4xl font-semibold leading-tight text-[#fff7e6] md:text-6xl">
+              天籁之音 古筝 AI 音色鉴赏
+            </h1>
+            <p className="hero-copy-glow mx-auto mt-6 max-w-[430px] text-[18px] leading-9 text-[#fff1c6] md:text-[20px]">
               以频谱、共鸣、动态与木质感为线索，听见一张古筝真正的气质。
             </p>
             <div className="mt-8 flex justify-center">
               <a
                 href="#lab"
-                className="group inline-flex h-14 min-w-[172px] items-center justify-center gap-3 rounded-full border border-[#d8bd80]/70 bg-gradient-to-r from-[#fff0c8]/90 to-[#cda75d]/90 px-8 text-[17px] font-semibold text-[#3e2f18] shadow-[0_18px_50px_rgba(117,91,45,0.22)] transition hover:-translate-y-1 hover:shadow-[0_24px_60px_rgba(117,91,45,0.28)]"
+                className="group inline-flex h-14 min-w-[172px] items-center justify-center gap-3 rounded-full border border-[#ffe8ac]/80 bg-gradient-to-r from-[#fff0c8]/95 to-[#cda75d]/95 px-8 text-[17px] font-semibold text-[#2d2413] shadow-[0_18px_50px_rgba(33,48,24,0.35)] transition hover:shadow-[0_24px_60px_rgba(33,48,24,0.42)]"
               >
                 <Volume2 className="h-5 w-5" strokeWidth={1.8} />
                 <span>听音识色</span>
@@ -351,7 +417,7 @@ export default function GuzhengExperience() {
               </a>
             </div>
             {autoplayBlocked ? (
-              <p className="mt-5 text-sm text-[#60734c]">浏览器已拦截自动播放，点击左上角音符即可开启背景音乐。</p>
+              <p className="hero-copy-glow mt-5 text-sm text-[#fff1c6]">浏览器已拦截自动播放，点击左上角音符即可开启背景音乐。</p>
             ) : null}
           </div>
         </div>
@@ -361,7 +427,7 @@ export default function GuzhengExperience() {
         <SectionTitle
           eyebrow="AI Tone Studio"
           title="上传一段古筝音频，生成音色品鉴"
-          text="系统会先进行古筝声音预检，通过后再读取响度包络、动态范围、频谱重心与尾音衰减，生成可导出的 AI 音色报告。"
+          text="系统会先进行古筝声音预检，通过后仅取前 60 秒音频，并按每 10 秒分段读取响度包络、动态范围、频谱重心与尾音衰减。"
         />
 
         <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[0.9fr_1.1fr]">
@@ -384,7 +450,7 @@ export default function GuzhengExperience() {
                 event.preventDefault();
                 handleUserFile(event.dataTransfer.files?.[0]);
               }}
-              className="grid min-h-[230px] w-full place-items-center rounded-lg border border-dashed border-[#afbd9f] bg-white/38 p-8 text-center transition hover:-translate-y-1 hover:border-[#caa96e] hover:bg-white/55"
+              className="grid min-h-[230px] w-full place-items-center rounded-lg border border-dashed border-[#afbd9f] bg-white/38 p-8 text-center transition-colors hover:border-[#caa96e] hover:bg-white/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa96e]/55"
             >
               <input
                 ref={uploadInputRef}
@@ -398,7 +464,7 @@ export default function GuzhengExperience() {
               </span>
               <span className="mt-5 block text-xl font-semibold text-[#2d3826]">拖入或选择古筝音频</span>
               <span className="mt-2 block max-w-[280px] text-sm leading-6 text-[#65745a]">
-                建议 10 秒以上，古筝独奏或少量环境声效果最佳
+                建议 10 秒以上；超过 60 秒时，系统只分析前 60 秒
               </span>
             </button>
 
@@ -411,7 +477,7 @@ export default function GuzhengExperience() {
           </section>
 
           <section className="dark-glass relative min-h-[480px] overflow-hidden rounded-lg p-5 text-paper">
-            <WaveformCanvas data={waveform} />
+            {waveform?.waveform ? <WaveformCanvas data={waveform} /> : <IdleWaveform />}
             <div className="absolute bottom-5 left-5 right-5 flex items-center gap-3 rounded-lg border border-white/20 bg-[#1f2b1b]/55 px-4 py-4 backdrop-blur-xl">
               <span className="h-2.5 w-2.5 rounded-full bg-[#f3d78c] shadow-[0_0_22px_rgba(243,215,140,0.9)]" />
               <p className="m-0 text-sm leading-6 text-white/78">{status}</p>
@@ -445,7 +511,7 @@ export default function GuzhengExperience() {
         </div>
       </section>
 
-      <section id="report" className="bg-[#f5efd9] px-5 py-20 md:px-10 md:py-24">
+      <section ref={reportSectionRef} id="report" className="bg-[#f5efd9] px-5 py-20 md:px-10 md:py-24">
         <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1fr_380px]">
           <ReportCard
             refTarget={reportCardRef}
@@ -466,6 +532,9 @@ export default function GuzhengExperience() {
             <div className="mt-3 rounded-lg bg-white/42 px-4 py-3 text-sm text-[#526449]">
               {report.spectrumSummary}
             </div>
+            <div className="mt-3 rounded-lg border border-white/65 bg-white/32 px-4 py-3 text-sm leading-6 text-[#526449]">
+              {report.spectrumDetail}
+            </div>
           </aside>
         </div>
 
@@ -475,60 +544,85 @@ export default function GuzhengExperience() {
               <p className="mb-2 text-sm uppercase text-[#a17a34]">AI Detailed Review</p>
               <h2 className="text-2xl font-semibold text-[#25321f]">AI 具体分析报告</h2>
             </div>
-            <button
-              type="button"
-              onClick={exportAiPdf}
-              disabled={isExporting || !canExport}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#caa96e]/60 bg-white/60 px-5 text-sm font-medium text-[#5d4a24] shadow-soft transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              <FileDown className="h-4 w-4" />
-              导出 PDF
-            </button>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={generateAiReport}
+                disabled={isAiLoading || !canGenerateAi}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#8ba079]/60 bg-[#5d7048] px-5 text-sm font-medium text-white shadow-soft transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Sparkles className="h-4 w-4" />
+                生成 AI 报告
+              </button>
+            </div>
           </div>
 
-          <article ref={aiReportRef} className="overflow-hidden rounded-lg border border-white/70 bg-[#f6edda] shadow-soft">
+          <article ref={aiReportRef} className="overflow-hidden rounded-lg border border-white/70 bg-[#f5efd9] shadow-soft">
             <div className="bg-gradient-to-br from-[#fffaf0] via-[#f3ead3] to-[#e0ebd4] p-6 md:p-8">
               <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-sm uppercase text-[#a17a34]">AI Detailed Review</p>
                   <h3 className="mt-2 text-3xl font-semibold text-[#25321f]">古筝音色详细鉴赏</h3>
                   <p className="mt-2 text-sm text-[#60734c]">
-                    来源：{aiSource || "等待音频"} · 古筝置信度：{report.guzhengConfidence}/100
+                    {aiReportReady ? `来源：${aiSource || "AI"} · 古筝置信度：${report.guzhengConfidence}/100` : "点击生成 AI 报告后，将显示完整图文结论。"}
                   </p>
                 </div>
-                <span className="rounded-full border border-[#caa96e]/50 bg-white/55 px-4 py-2 text-sm text-[#6a572e]">
-                  {isAiLoading ? "AI 生成中..." : "可导出 PDF"}
-                </span>
               </div>
+            </div>
 
-              <div className="mt-6 overflow-hidden rounded-lg border border-white/70 bg-white/62 p-3">
-                {reportImageUrl ? (
+            {aiReportReady ? (
+              <>
+                <div className="bg-[#f5efd9] p-6 md:p-8">
+                  <div className="overflow-hidden rounded-lg border border-white/70 bg-white/62 p-3">
                   <img src={reportImageUrl} alt="音色分析报告图片" className="w-full rounded-md" />
-                ) : (
-                  <div className="rounded-md border border-dashed border-[#c9b98e] bg-[#fbf6e8] p-8 text-center text-sm text-[#6f7c61]">
-                    生成音色分析后，这里会显示报告图片，导出 PDF 时也会自动生成。
                   </div>
-                )}
-              </div>
+                </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-3">
-                <MiniStat title="综合评分" value={report.score} />
-                <MiniStat title="共鸣厚度" value={report.dimensionScores.resonance} />
-                <MiniStat title="颗粒质感" value={report.dimensionScores.texture} />
-              </div>
-            </div>
+                <div className="bg-[#f5efd9] px-6 pb-6 md:px-8 md:pb-8">
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <MiniStat title="综合评分" value={report.score} />
+                    <MiniStat title="清亮度" value={report.dimensionScores.brightness} />
+                    <MiniStat title="共鸣厚度" value={report.dimensionScores.resonance} />
+                    <MiniStat title="颗粒质感" value={report.dimensionScores.texture} />
+                  </div>
+                </div>
 
-            <div className="p-6 md:p-8">
-              <h4 className="mb-5 text-xl font-semibold text-[#25321f]">具体分析结论</h4>
-              <div className="grid gap-4">
-                {formattedAiReport.map((block, index) => (
-                  <section key={`${block.title}-${index}`} className="rounded-lg border border-[#e2d4b3] bg-white/55 p-5">
-                    <h5 className="mb-3 text-base font-semibold text-[#8a6d35]">{block.title}</h5>
-                    <p className="whitespace-pre-line text-[15px] leading-8 text-[#35402d]">{block.body}</p>
-                  </section>
-                ))}
+                {report.segmentAnalyses?.length ? (
+                  <div className="grid gap-4 bg-[#f5efd9] px-6 pb-6 md:px-8 md:pb-8 lg:grid-cols-2">
+                    <ComparisonChartCard
+                      title="频谱与动态"
+                      text="每 10 秒对比频谱重心与动态范围，观察亮度和强弱层次是否稳定。"
+                    >
+                      <SegmentComparisonCanvas data={report.segmentAnalyses} mode="spectrumDynamic" />
+                    </ComparisonChartCard>
+                    <ComparisonChartCard
+                      title="共鸣与质感"
+                      text="每 10 秒对比共鸣时间与颗粒质感，观察尾音支撑和触弦清晰度。"
+                    >
+                      <SegmentComparisonCanvas data={report.segmentAnalyses} mode="resonanceTexture" />
+                    </ComparisonChartCard>
+                  </div>
+                ) : null}
+
+                <div className="grid gap-4 bg-[#f5efd9] p-6 md:p-8">
+                  {formattedAiReport.map((block, index) => (
+                    <section
+                      key={`${block.title}-${index}`}
+                      className="rounded-lg border border-[#e2d4b3] bg-[#f5efd9] p-5"
+                    >
+                      <h5 className="mb-3 text-base font-semibold text-[#8a6d35]">{block.title}</h5>
+                      <p className="whitespace-pre-line text-[15px] leading-8 text-[#35402d]">{block.body}</p>
+                    </section>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="bg-[#f5efd9] p-6 md:p-8">
+                <div className="rounded-lg border border-dashed border-[#c9b98e] bg-[#fbf6e8]/60 p-8 text-center text-sm text-[#6f7c61]">
+                  {isAiLoading ? "AI 正在生成图文报告，请稍候。" : "生成 AI 报告后，报告图片、评分、分段图表和具体结论会一起出现。"}
+                </div>
               </div>
-            </div>
+            )}
           </article>
         </section>
       </section>
@@ -554,7 +648,10 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
 
       <div className="mt-6 flex flex-wrap gap-2">
         {report.traits.map((trait) => (
-          <span key={trait} className="rounded-full border border-[#cad6bc] bg-white/45 px-3 py-2 text-sm text-[#526449]">
+          <span
+            key={trait}
+            className="inline-flex min-w-[92px] flex-none justify-center whitespace-nowrap rounded-full border border-[#cad6bc] bg-white/45 px-3 py-2 text-center text-[13px] leading-none text-[#526449]"
+          >
             {trait}
           </span>
         ))}
@@ -563,6 +660,13 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
       <p className="mt-5 rounded-lg border border-white/65 bg-white/42 p-5 text-lg leading-9 text-[#35402d]">
         {report.summary}
       </p>
+
+      {report.analyzedDuration && report.analyzedDuration !== "--" ? (
+        <div className="mt-4 rounded-lg border border-[#d9e2ca] bg-white/38 px-4 py-3 text-sm leading-6 text-[#5c6b51]">
+          分析窗口：已分析 {formatSeconds(report.analyzedDuration)}
+          {report.wasTrimmed ? `，原音频 ${formatSeconds(report.originalDuration)}，超过 60 秒部分已自动舍弃。` : "，未触发截断。"}
+        </div>
+      ) : null}
 
       <div className="mt-5 grid gap-3 md:grid-cols-3">
         <ScoreCard title="清亮度" value={report.dimensionScores.brightness} />
@@ -577,6 +681,37 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
         <Metric title="木材推测" value={report.woodValue} text={report.woodText} />
         <Metric title="声音年龄" value={report.ageValue} text={report.ageText} />
       </div>
+
+      <div className="mt-4 rounded-lg border border-[#d9e2ca] bg-white/38 px-4 py-3 text-sm leading-6 text-[#5c6b51]">
+        古筝质检基于参考声档声纹相似度、频谱重心、中高频比例、拨弦瞬态、尾音衰减与动态范围综合估算。
+      </div>
+
+      {report.segmentAnalyses?.length ? (
+        <section className="mt-5 rounded-lg border border-white/65 bg-white/36 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-[#25321f]">10 秒分段解析</h3>
+            <span className="whitespace-nowrap text-sm text-[#8a6d35]">{report.segmentAnalyses.length} 段</span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            {report.segmentAnalyses.map((segment) => (
+              <article key={segment.index} className="rounded-lg border border-[#dfe5d3] bg-white/45 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2 text-sm">
+                  <b className="text-[#8a6d35]">
+                    {segment.startSecond}-{segment.endSecond}s
+                  </b>
+                  <span className="text-[#60734c]">{segment.centroidHz} Hz</span>
+                </div>
+                <p className="text-sm leading-6 text-[#526449]">{segment.summary}</p>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs text-[#66755b]">
+                  <span className="rounded-md bg-[#eef3e5] px-2 py-1">亮 {segment.brightness}</span>
+                  <span className="rounded-md bg-[#f4ecd8] px-2 py-1">鸣 {segment.resonance}</span>
+                  <span className="rounded-md bg-[#eef3e5] px-2 py-1">粒 {segment.texture}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <InfoBox title="不足提示">
@@ -603,6 +738,54 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
         </button>
       </div>
     </section>
+  );
+}
+
+function IntroOverlay({ leaving, onDone }) {
+  const [videoReady, setVideoReady] = useState(false);
+  const videoOpacity = leaving || !videoReady ? "opacity-0" : "opacity-100";
+  const videoScale = leaving ? "scale-[1.018]" : "scale-100";
+
+  useEffect(() => {
+    if (!videoReady) {
+      const fallback = window.setTimeout(onDone, 5000);
+      return () => window.clearTimeout(fallback);
+    }
+    const release = window.setTimeout(onDone, 3400);
+    return () => window.clearTimeout(release);
+  }, [onDone, videoReady]);
+
+  useEffect(() => {
+    const fallback = window.setTimeout(onDone, 9000);
+    return () => window.clearTimeout(fallback);
+  }, [onDone]);
+
+  return (
+    <div
+      className={`intro-overlay fixed inset-0 z-[80] overflow-hidden bg-[#f5efd9] transition duration-1000 ease-out ${
+        leaving ? "pointer-events-none opacity-0" : "opacity-100"
+      }`}
+      aria-hidden="true"
+    >
+      <div className="absolute inset-0 bg-[url('/hero-bg.png')] bg-cover bg-[38%_center] md:bg-center" />
+      <video
+        className={`absolute inset-0 h-full w-full object-cover transition duration-700 ${videoOpacity} ${videoScale}`}
+        src="/bg.mp4"
+        muted
+        playsInline
+        autoPlay
+        preload="auto"
+        onCanPlay={() => setVideoReady(true)}
+        onLoadedData={() => setVideoReady(true)}
+        onTimeUpdate={(event) => {
+          if (event.currentTarget.currentTime >= 3) onDone();
+        }}
+        onEnded={onDone}
+        onError={onDone}
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-[#f5efd9]/38" />
+      <div className={`intro-veil absolute inset-0 bg-[#f5efd9] ${videoReady ? "opacity-0" : "opacity-45"}`} />
+    </div>
   );
 }
 
@@ -650,6 +833,12 @@ function InfoBox({ title, children }) {
   );
 }
 
+function formatSeconds(value) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds)) return "未知时长";
+  return `${seconds.toFixed(seconds % 1 ? 1 : 0)} 秒`;
+}
+
 function MiniStat({ title, value }) {
   return (
     <div className="rounded-lg border border-white/70 bg-white/55 p-4">
@@ -657,6 +846,164 @@ function MiniStat({ title, value }) {
       <b className="mt-2 block text-2xl text-[#9a7b3d]">{value}</b>
     </div>
   );
+}
+
+function ComparisonChartCard({ title, text, children }) {
+  return (
+    <section className="rounded-lg border border-white/70 bg-white/58 p-4">
+      <div className="mb-3">
+        <h5 className="text-base font-semibold text-[#25321f]">{title}</h5>
+        <p className="mt-1 text-sm leading-6 text-[#60734c]">{text}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SegmentComparisonCanvas({ data, mode }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const ctx = canvas.getContext("2d");
+    let frame = 0;
+
+    const draw = () => {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.min(window.devicePixelRatio || 1, 1.6);
+      canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+      canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+      const { width, height } = canvas;
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = "rgba(255,255,255,.34)";
+      ctx.fillRect(0, 0, width, height);
+
+      const left = 42 * ratio;
+      const right = width - 20 * ratio;
+      const top = 52 * ratio;
+      const bottom = height - 44 * ratio;
+      const plotWidth = Math.max(1, right - left);
+      const plotHeight = Math.max(1, bottom - top);
+      const points = Array.isArray(data) && data.length ? data : [];
+
+      ctx.strokeStyle = "rgba(82,100,73,.18)";
+      ctx.lineWidth = 1 * ratio;
+      ctx.font = `${11 * ratio}px Microsoft YaHei`;
+      ctx.fillStyle = "rgba(82,100,73,.68)";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      [0, 25, 50, 75, 100].forEach((label) => {
+        const y = bottom - (label / 100) * plotHeight;
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(right, y);
+        ctx.stroke();
+        ctx.fillText(String(label), left - 8 * ratio, y);
+      });
+
+      ctx.save();
+      ctx.translate(13 * ratio, top + plotHeight / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = "center";
+      ctx.fillText("归一化对比", 0, 0);
+      ctx.restore();
+
+      if (!points.length) {
+        ctx.textAlign = "center";
+        ctx.fillStyle = "rgba(82,100,73,.58)";
+        ctx.fillText("等待 10 秒分段数据", left + plotWidth / 2, top + plotHeight / 2);
+        return;
+      }
+
+      const series =
+        mode === "spectrumDynamic"
+          ? [
+              { name: "频谱重心", unit: "Hz", color: "#b88b3d", values: points.map((item) => item.centroidHz), min: 450, max: 2600 },
+              { name: "动态范围", unit: "dB", color: "#5d7048", values: points.map((item) => item.dynamicDb), min: 5, max: 28 },
+            ]
+          : [
+              { name: "共鸣时间", unit: "秒", color: "#b88b3d", values: points.map((item) => item.resonanceSeconds), min: 1.8, max: 6.4 },
+              { name: "颗粒质感", unit: "分", color: "#5d7048", values: points.map((item) => item.texture), min: 35, max: 100 },
+            ];
+
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      series.forEach((item, index) => {
+        const x = left;
+        const y = 14 * ratio + index * 18 * ratio;
+        ctx.fillStyle = item.color;
+        ctx.fillRect(x, y - 4 * ratio, 16 * ratio, 3 * ratio);
+        ctx.fillStyle = "rgba(49,61,40,.78)";
+        ctx.fillText(`${item.name} ${formatRange(item.values, item.unit)}`, x + 22 * ratio, y - 2 * ratio);
+      });
+
+      const xFor = (index) => left + (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth);
+      const yFor = (value, item) => {
+        const normalized = clampClient((value - item.min) / (item.max - item.min), 0, 1);
+        return bottom - normalized * plotHeight;
+      };
+
+      series.forEach((item) => {
+        ctx.beginPath();
+        item.values.forEach((value, index) => {
+          const x = xFor(index);
+          const y = yFor(value, item);
+          if (index === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = 2.2 * ratio;
+        ctx.stroke();
+
+        item.values.forEach((value, index) => {
+          const x = xFor(index);
+          const y = yFor(value, item);
+          ctx.fillStyle = "#fffaf0";
+          ctx.beginPath();
+          ctx.arc(x, y, 4.5 * ratio, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = item.color;
+          ctx.lineWidth = 1.5 * ratio;
+          ctx.stroke();
+        });
+      });
+
+      ctx.fillStyle = "rgba(82,100,73,.72)";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      points.forEach((segment, index) => {
+        const x = xFor(index);
+        ctx.fillText(`${segment.startSecond}-${segment.endSecond}s`, x, bottom + 12 * ratio);
+      });
+    };
+
+    const observer = new ResizeObserver(() => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(draw);
+    });
+    observer.observe(canvas);
+    draw();
+
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [data, mode]);
+
+  return <canvas ref={canvasRef} className="h-[260px] w-full rounded-lg border border-white/70 bg-white/38" />;
+}
+
+function clampClient(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function formatRange(values, unit) {
+  if (!values.length) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const digits = unit === "Hz" || unit === "分" ? 0 : 1;
+  return `${min.toFixed(digits)}-${max.toFixed(digits)}${unit}`;
 }
 
 function MountainAnimation() {
@@ -756,8 +1103,6 @@ function WaveformCanvas({ data }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    let frame;
-    let time = 0;
     let canvasWidth = 0;
     let canvasHeight = 0;
 
@@ -774,12 +1119,15 @@ function WaveformCanvas({ data }) {
       }
     }
 
+    function clearCanvas() {
+      resizeIfNeeded();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
     function drawStatic() {
       resizeIfNeeded();
       const { width, height } = canvas;
       ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = "rgba(255,247,230,.04)";
-      for (let x = 0; x < width; x += width / 12) ctx.fillRect(x, 0, 1, height);
 
       const gradient = ctx.createLinearGradient(0, 0, width, height);
       gradient.addColorStop(0, "rgba(255,247,230,.14)");
@@ -815,42 +1163,46 @@ function WaveformCanvas({ data }) {
       }
     }
 
-    let lastFrameTime = 0;
-    function drawIdle(timestamp = 0) {
-      if (timestamp - lastFrameTime < 33) {
-        frame = requestAnimationFrame(drawIdle);
-        return;
-      }
-      lastFrameTime = timestamp;
-      drawStatic();
-      const { width, height } = canvas;
-      time += 0.02;
-      ctx.beginPath();
-      for (let x = 0; x < width; x += 5) {
-        const y = height * 0.5 + Math.sin(x * 0.012 + time) * height * 0.08 + Math.sin(x * 0.03 - time * 1.8) * height * 0.035;
-        if (x === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      frame = requestAnimationFrame(drawIdle);
-    }
-
     const observer = new ResizeObserver(() => {
       canvasWidth = 0;
       canvasHeight = 0;
       if (data?.waveform) drawStatic();
+      else clearCanvas();
     });
     observer.observe(canvas);
     if (data?.waveform) drawStatic();
-    else drawIdle();
+    else clearCanvas();
 
     return () => {
-      if (frame) cancelAnimationFrame(frame);
       observer.disconnect();
     };
   }, [data]);
 
-  return <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-label="音频波形" />;
+  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full select-none" aria-label="音频波形" />;
+}
+
+function IdleWaveform() {
+  return (
+    <svg
+      className="idle-wave pointer-events-none absolute inset-0 h-full w-full select-none"
+      viewBox="0 0 1000 480"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <path
+        className="idle-wave-line idle-wave-line-a"
+        d="M0 286 C78 286 78 238 156 238 C228 238 220 256 292 210 C358 168 398 158 454 218 C520 288 570 242 632 264 C710 292 714 334 780 338 C852 342 858 230 926 220 C970 214 980 244 1000 228"
+      />
+      <path
+        className="idle-wave-line idle-wave-line-b"
+        d="M0 286 C82 278 82 248 156 242 C230 236 226 262 292 214 C360 164 400 174 454 224 C522 286 574 246 632 270 C704 300 720 326 780 330 C850 334 858 244 926 232 C970 224 982 250 1000 236"
+      />
+      <path
+        className="idle-wave-glow"
+        d="M0 286 C78 286 78 238 156 238 C228 238 220 256 292 210 C358 168 398 158 454 218 C520 288 570 242 632 264 C710 292 714 334 780 338 C852 342 858 230 926 220 C970 214 980 244 1000 228"
+      />
+    </svg>
+  );
 }
 
 function SpectrumCanvas({ spectrum }) {
@@ -917,11 +1269,11 @@ function SpectrumCanvas({ spectrum }) {
     ctx.fillText("高频", left + plotWidth * 0.86, bottom + 10 * ratio);
   }, [spectrum]);
 
-  return <canvas ref={canvasRef} className="h-[360px] w-full rounded-lg border border-white/70 bg-white/40" />;
+  return <canvas ref={canvasRef} className="pointer-events-none h-[360px] w-full select-none rounded-lg border border-white/70 bg-white/40" />;
 }
 
 function formatAiReport(text) {
-  const clean = String(text || "").trim();
+  const clean = sanitizeAiText(text);
   if (!clean) return [{ title: "等待分析", body: "完成音频分析后，这里会展示 AI 的详细结论。" }];
   const paragraphs = clean
     .replace(/\r/g, "")
@@ -931,8 +1283,17 @@ function formatAiReport(text) {
   const titles = ["综合判断", "频谱与动态", "共鸣与质感", "曲风适配", "综合评价"];
   return (paragraphs.length ? paragraphs : [clean]).map((body, index) => ({
     title: titles[index] || `分析要点 ${index + 1}`,
-    body: body.replace(/^#+\s*/, "").replace(/^\d+[.、]\s*/, ""),
+    body: sanitizeAiText(body).replace(/^#+\s*/, "").replace(/^\d+[.、]\s*/, ""),
   }));
+}
+
+function sanitizeAiText(text) {
+  return String(text || "")
+    .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
+    .replace(/^\s*[-•]\s+/gm, "")
+    .replace(/^#+\s+/gm, "")
+    .trim();
 }
 
 function downloadDataUrl(dataUrl, filename) {
@@ -942,11 +1303,6 @@ function downloadDataUrl(dataUrl, filename) {
   link.click();
 }
 
-function loadImage(dataUrl) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = dataUrl;
-  });
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }

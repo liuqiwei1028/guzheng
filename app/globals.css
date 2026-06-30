@@ -15,6 +15,7 @@
 
 html {
   scroll-behavior: smooth;
+  scrollbar-width: none;
 }
 
 body {
@@ -24,6 +25,15 @@ body {
   background: #f5efd9;
   font-family: "Noto Serif SC", "Songti SC", "Microsoft YaHei", serif;
   overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 button,
@@ -33,6 +43,11 @@ input {
 
 button {
   cursor: pointer;
+}
+
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible) {
+  outline: none;
 }
 
 canvas {
@@ -70,9 +85,114 @@ canvas {
   animation: stringGlow 2.8s ease-in-out infinite;
 }
 
+.hero-breathe {
+  animation: heroBreathe 8s ease-in-out infinite alternate;
+}
+
+.hero-mist {
+  animation: heroMist 12s ease-in-out infinite alternate;
+}
+
+.hero-water {
+  animation: heroWater 7s ease-in-out infinite;
+  mask-image: linear-gradient(90deg, transparent, black 18%, black 82%, transparent);
+}
+
+.hero-light-sweep {
+  animation: heroLightSweep 9s ease-in-out infinite alternate;
+}
+
+.hero-title-glow {
+  text-shadow:
+    0 3px 18px rgba(7, 18, 8, 0.82),
+    0 0 42px rgba(20, 32, 20, 0.72);
+}
+
+.hero-copy-glow {
+  text-shadow:
+    0 2px 12px rgba(7, 18, 8, 0.86),
+    0 0 30px rgba(20, 32, 20, 0.62);
+}
+
+.intro-overlay video {
+  transform-origin: center;
+  will-change: opacity, transform;
+}
+
+.intro-veil {
+  transition: opacity 700ms ease;
+}
+
+.idle-wave {
+  contain: paint;
+  transform: translateZ(0);
+}
+
+.idle-wave-line,
+.idle-wave-glow {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.idle-wave-line {
+  stroke: rgba(230, 204, 130, 0.66);
+  stroke-width: 1.7;
+}
+
+.idle-wave-line-a {
+  animation: idleWaveA 5.8s ease-in-out infinite;
+}
+
+.idle-wave-line-b {
+  animation: idleWaveB 5.8s ease-in-out infinite;
+}
+
+.idle-wave-glow {
+  stroke: rgba(255, 241, 198, 0.22);
+  stroke-width: 5;
+  filter: blur(4px);
+  animation: idleWaveGlow 5.8s ease-in-out infinite;
+}
+
 @keyframes musicSpin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes idleWaveA {
+  0%,
+  100% {
+    opacity: 0.9;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.18;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes idleWaveB {
+  0%,
+  100% {
+    opacity: 0.16;
+    transform: translateY(10px);
+  }
+  50% {
+    opacity: 0.88;
+    transform: translateY(0);
+  }
+}
+
+@keyframes idleWaveGlow {
+  0%,
+  100% {
+    opacity: 0.34;
+  }
+  50% {
+    opacity: 0.12;
   }
 }
 
@@ -85,5 +205,48 @@ canvas {
   50% {
     opacity: 0.88;
     transform: translateX(8%);
+  }
+}
+
+@keyframes heroBreathe {
+  from {
+    opacity: 0.78;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes heroMist {
+  from {
+    opacity: 0.18;
+    transform: translate3d(-4%, 0, 0) scaleX(1);
+  }
+  to {
+    opacity: 0.42;
+    transform: translate3d(5%, 8px, 0) scaleX(1.08);
+  }
+}
+
+@keyframes heroWater {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.42;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes heroLightSweep {
+  from {
+    opacity: 0.28;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0.46;
+    transform: translateX(-4%);
   }
 }
