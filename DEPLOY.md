@@ -2,7 +2,7 @@
 
 本项目是 Next.js 应用，包含 `/api/deepseek` 服务端接口，不能作为纯静态网页部署。服务器需要 Node.js 运行时，或使用 Docker。
 
-## 方案一：Linux 服务器 + PM2 + Nginx
+## 方案一：Linux 服务器 + PM2 + Nginx SSL
 
 适合普通云服务器、宝塔面板、轻量服务器。
 
@@ -12,14 +12,18 @@
 - npm
 - pm2
 - nginx
+- 已解析到服务器的域名
+- SSL 证书，可以使用宝塔面板、云厂商证书或 certbot 申请
 
 ```bash
 npm install -g pm2
 ```
 
-### 2. 上传代码并安装依赖
+### 2. 拉取代码并安装依赖
 
 ```bash
+cd /www/wwwroot
+git clone https://github.com/liuqiwei1028/guzheng.git guzheng-timbre-studio
 cd /www/wwwroot/guzheng-timbre-studio
 npm ci
 cp .env.production.example .env.production
@@ -32,7 +36,7 @@ DEEPSEEK_API_KEY=你的真实Key
 DEEPSEEK_MODEL=deepseek-chat
 ```
 
-### 3. 构建并启动
+### 3. 构建并启动 Next.js
 
 ```bash
 npm run build
@@ -40,16 +44,37 @@ pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
-本应用默认监听 `127.0.0.1:3000`，外部访问交给 Nginx 反向代理。
+本应用默认监听 `127.0.0.1:3000`，外部访问交给 Nginx HTTPS 反向代理。
 
-### 4. Nginx 配置示例
+## 4. Nginx SSL 配置示例
 
-将 `your-domain.com` 改成你的域名：
+将 `your-domain.com` 改成你的域名，并把证书路径改成服务器上的真实路径。
 
 ```nginx
 server {
     listen 80;
+    listen [::]:80;
     server_name your-domain.com www.your-domain.com;
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name your-domain.com www.your-domain.com;
+
+    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
 
     client_max_body_size 20m;
 
@@ -59,18 +84,33 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
     }
 }
 ```
 
-配置 HTTPS 时，建议使用服务器面板或 certbot 自动签发证书。
+如果使用宝塔面板：
 
-### 5. 更新部署
+1. 站点目录可指向项目目录，但不要把它当 PHP 静态站点运行。
+2. 在站点设置中开启 SSL。
+3. 在反向代理中配置目标 URL：`http://127.0.0.1:3000`。
+4. 确认强制 HTTPS 已开启。
+
+修改 Nginx 配置后执行：
 
 ```bash
+nginx -t
+systemctl reload nginx
+```
+
+## 5. 更新部署
+
+```bash
+cd /www/wwwroot/guzheng-timbre-studio
 git pull
 npm ci
 npm run build
@@ -84,13 +124,13 @@ docker build -t guzheng-timbre-studio .
 docker run -d \
   --name guzheng-timbre-studio \
   --restart unless-stopped \
-  -p 3000:3000 \
+  -p 127.0.0.1:3000:3000 \
   -e DEEPSEEK_API_KEY=你的真实Key \
   -e DEEPSEEK_MODEL=deepseek-chat \
   guzheng-timbre-studio
 ```
 
-如需绑定域名，仍建议在宿主机 Nginx 中反向代理到 `127.0.0.1:3000`。
+如需绑定域名，仍建议在宿主机 Nginx 中启用 SSL，并反向代理到 `http://127.0.0.1:3000`。
 
 ## 隐私与接口说明
 
