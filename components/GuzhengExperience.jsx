@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, ImageDown, Music2, Sparkles, UploadCloud, Volume2 } from "lucide-react";
+import { BookOpenCheck, ChevronRight, Gem, ImageDown, Mail, Music2, Phone, ShieldCheck, Sparkles, UploadCloud, Volume2 } from "lucide-react";
 import {
   MAX_ANALYSIS_SECONDS,
   SEGMENT_SECONDS,
@@ -19,7 +19,7 @@ import {
 
 const initialReport = {
   score: "--",
-  dimensionScores: { brightness: "--", resonance: "--", texture: "--" },
+  dimensionScores: { balance: "--", purity: "--", resonance: "--", control: "--", brightness: "--", texture: "--" },
   traits: ["高音清亮", "中音圆润", "低音厚重"],
   summary: "上传或选择一段古筝音频后，AI 将先判断是否为古筝声音，再生成音色评分、频谱分析与详细鉴赏报告。",
   dynamicValue: "--",
@@ -31,7 +31,7 @@ const initialReport = {
   ageValue: "--",
   ageText: "等待分析",
   weaknesses: ["等待音频进入分析。"],
-  styleFit: "系统会根据清亮度、厚度、爆发力与尾音判断适合曲风。",
+  styleFit: "系统会根据音区均衡、纯净度、共鸣与音色控制判断适合曲风。",
   spectrumSummary: "等待频谱分析",
   spectrumDetail: "完成分析后，这里会显示频段比例、频谱重心和分段变化。",
   spectrumLabel: "未载入",
@@ -133,7 +133,7 @@ export default function GuzhengExperience() {
   }, []);
 
   useEffect(() => {
-    const sectionIds = ["lab", "samples", "report"];
+    const sectionIds = ["lab", "samples", "report", "guide"];
     const updateActiveSection = () => {
       const anchor = window.innerHeight * 0.34;
       const current = sectionIds.reduce((active, id) => {
@@ -159,6 +159,10 @@ export default function GuzhengExperience() {
   const navLinkClass = (id) =>
     `rounded-full px-3 py-1.5 transition ${
       activeSection === id ? "bg-[#5d7048]/90 text-white shadow-soft" : "hover:bg-white/42 hover:text-[#8a6d35]"
+    }`;
+  const mobileNavLinkClass = (id) =>
+    `rounded-full px-2 py-2 text-center text-[12px] font-medium leading-none transition ${
+      activeSection === id ? "bg-[#5d7048] text-white shadow-soft" : "text-[#405136]"
     }`;
 
   async function ensureAudioContext({ resume = false } = {}) {
@@ -341,22 +345,22 @@ export default function GuzhengExperience() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f5efd9] text-ink">
+    <main className="min-h-screen overflow-hidden bg-[#f5efd9] pb-24 text-ink md:pb-0">
       <audio ref={musicRef} src="/bg-music.flac" preload="metadata" />
       {introVisible ? <IntroOverlay leaving={introLeaving} onDone={finishIntro} /> : null}
 
       <header
-        className="fixed left-0 right-0 top-0 z-40 flex items-center justify-between px-5 py-5 transition duration-500 md:px-10"
+        className="fixed left-0 right-0 top-0 z-40 flex items-center justify-between px-4 py-4 transition duration-500 md:px-10 md:py-5"
       >
         <button
           type="button"
           onClick={toggleMusic}
-          className="group flex h-14 w-14 items-center justify-center rounded-full border border-white/70 bg-white/35 text-[#5d6f45] shadow-soft backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white/55"
+          className="group flex h-12 w-12 items-center justify-center rounded-full border border-white/70 bg-white/40 text-[#5d6f45] shadow-soft backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white/55 md:h-14 md:w-14"
           aria-label={isMusicPlaying ? "暂停背景音乐" : "播放背景音乐"}
           title={isMusicPlaying ? "暂停背景音乐" : "播放背景音乐"}
         >
           <span className={isMusicPlaying ? "music-spin" : ""}>
-            <Music2 className="h-7 w-7" strokeWidth={1.8} />
+            <Music2 className="h-6 w-6 md:h-7 md:w-7" strokeWidth={1.8} />
           </span>
         </button>
         <nav className="hidden items-center gap-3 rounded-full border border-white/50 bg-white/25 px-4 py-2 text-sm text-[#3e4e34] shadow-soft backdrop-blur-xl md:flex">
@@ -369,8 +373,26 @@ export default function GuzhengExperience() {
           <a href="#report" className={navLinkClass("report")}>
             AI 报告
           </a>
+          <a href="#guide" className={navLinkClass("guide")}>
+            使用指南
+          </a>
         </nav>
       </header>
+
+      <nav className="fixed bottom-3 left-3 right-3 z-50 grid grid-cols-4 gap-1 rounded-full border border-white/70 bg-[#fff8e8]/78 p-1.5 shadow-[0_18px_60px_rgba(42,54,35,0.24)] backdrop-blur-xl md:hidden">
+        <a href="#lab" className={mobileNavLinkClass("lab")}>
+          听音
+        </a>
+        <a href="#samples" className={mobileNavLinkClass("samples")}>
+          声档
+        </a>
+        <a href="#report" className={mobileNavLinkClass("report")}>
+          报告
+        </a>
+        <a href="#guide" className={mobileNavLinkClass("guide")}>
+          指南
+        </a>
+      </nav>
 
       <section className="relative min-h-[100svh] overflow-hidden">
         <div className="absolute inset-0 bg-[url('/hero-bg.png')] bg-cover bg-[38%_center] md:bg-center" />
@@ -395,21 +417,21 @@ export default function GuzhengExperience() {
           <div className="string-glow h-px w-full bg-gradient-to-r from-transparent via-[#fff3c5] to-transparent" />
         </div>
 
-        <div className="relative z-10 flex min-h-[100svh] items-center justify-center px-5 pb-14 pt-24 md:justify-end md:px-[9vw] md:pb-20">
+        <div className="relative z-10 flex min-h-[100svh] items-center justify-center px-4 pb-24 pt-24 md:justify-end md:px-[9vw] md:pb-20">
           <div className="w-full max-w-[500px] text-center md:mt-4">
-            <p className="hero-copy-glow mb-4 text-sm uppercase tracking-[0.18em] text-[#f3d78c]">
+            <p className="hero-copy-glow mb-4 text-[12px] uppercase tracking-[0.12em] text-[#f3d78c] sm:text-sm sm:tracking-[0.18em]">
               Guzheng Timbre Intelligence
             </p>
-            <h1 className="hero-title-glow mx-auto max-w-[520px] text-4xl font-semibold leading-tight text-[#fff7e6] md:text-6xl">
-              天籁之音 古筝 AI 音色鉴赏
+            <h1 className="hero-title-glow mx-auto max-w-[520px] text-[42px] font-semibold leading-tight text-[#fff7e6] sm:text-5xl md:text-6xl">
+              古筝 AI 音色鉴赏
             </h1>
-            <p className="hero-copy-glow mx-auto mt-6 max-w-[430px] text-[18px] leading-9 text-[#fff1c6] md:text-[20px]">
+            <p className="hero-copy-glow mx-auto mt-5 max-w-[430px] text-base leading-8 text-[#fff1c6] md:mt-6 md:text-[20px] md:leading-9">
               以频谱、共鸣、动态与木质感为线索，听见一张古筝真正的气质。
             </p>
-            <div className="mt-8 flex justify-center">
+            <div className="mt-7 flex justify-center md:mt-8">
               <a
                 href="#lab"
-                className="group inline-flex h-14 min-w-[172px] items-center justify-center gap-3 rounded-full border border-[#ffe8ac]/80 bg-gradient-to-r from-[#fff0c8]/95 to-[#cda75d]/95 px-8 text-[17px] font-semibold text-[#2d2413] shadow-[0_18px_50px_rgba(33,48,24,0.35)] transition hover:shadow-[0_24px_60px_rgba(33,48,24,0.42)]"
+                className="group inline-flex h-[52px] min-w-[160px] items-center justify-center gap-2 rounded-full border border-[#ffe8ac]/80 bg-gradient-to-r from-[#fff0c8]/95 to-[#cda75d]/95 px-7 py-3 text-base font-semibold text-[#2d2413] shadow-[0_18px_50px_rgba(33,48,24,0.35)] transition hover:shadow-[0_24px_60px_rgba(33,48,24,0.42)] md:h-14 md:min-w-[172px] md:gap-3 md:px-8 md:text-[17px]"
               >
                 <Volume2 className="h-5 w-5" strokeWidth={1.8} />
                 <span>听音识色</span>
@@ -423,7 +445,7 @@ export default function GuzhengExperience() {
         </div>
       </section>
 
-      <section id="lab" className="relative bg-[#f5efd9] px-5 py-20 md:px-10 md:py-24">
+      <section id="lab" className="relative bg-[#f5efd9] px-4 py-14 md:px-10 md:py-24">
         <SectionTitle
           eyebrow="AI Tone Studio"
           title="上传一段古筝音频，生成音色品鉴"
@@ -431,13 +453,13 @@ export default function GuzhengExperience() {
         />
 
         <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="glass-panel rounded-lg p-6">
+          <section className="glass-panel rounded-lg p-5 md:p-6">
             <div className="mb-6 flex items-center gap-4">
-              <div className="grid h-12 w-12 place-items-center rounded-full bg-[#5d7048] text-paper">
-                <UploadCloud className="h-6 w-6" strokeWidth={1.8} />
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#5d7048] text-paper md:h-12 md:w-12">
+                <UploadCloud className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.8} />
               </div>
               <div>
-                <h2 className="text-2xl font-semibold text-[#25321f]">音频采样</h2>
+                <h2 className="text-xl font-semibold text-[#25321f] md:text-2xl">音频采样</h2>
                 <p className="mt-1 text-sm text-[#65745a]">上传本地音频，或先点选下方样本试听分析。</p>
               </div>
             </div>
@@ -450,7 +472,7 @@ export default function GuzhengExperience() {
                 event.preventDefault();
                 handleUserFile(event.dataTransfer.files?.[0]);
               }}
-              className="grid min-h-[230px] w-full place-items-center rounded-lg border border-dashed border-[#afbd9f] bg-white/38 p-8 text-center transition-colors hover:border-[#caa96e] hover:bg-white/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa96e]/55"
+              className="grid min-h-[190px] w-full place-items-center rounded-lg border border-dashed border-[#afbd9f] bg-white/38 p-5 text-center transition-colors hover:border-[#caa96e] hover:bg-white/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa96e]/55 md:min-h-[230px] md:p-8"
             >
               <input
                 ref={uploadInputRef}
@@ -459,16 +481,16 @@ export default function GuzhengExperience() {
                 className="hidden"
                 onChange={(event) => handleUserFile(event.target.files?.[0])}
               />
-              <span className="grid h-20 w-20 place-items-center rounded-full border border-[#caa96e]/60 bg-[#fff7e6]/80 text-[#9d7b39]">
-                <Sparkles className="h-9 w-9" strokeWidth={1.5} />
+              <span className="grid h-16 w-16 place-items-center rounded-full border border-[#caa96e]/60 bg-[#fff7e6]/80 text-[#9d7b39] md:h-20 md:w-20">
+                <Sparkles className="h-7 w-7 md:h-9 md:w-9" strokeWidth={1.5} />
               </span>
-              <span className="mt-5 block text-xl font-semibold text-[#2d3826]">拖入或选择古筝音频</span>
+              <span className="mt-4 block text-lg font-semibold text-[#2d3826] md:mt-5 md:text-xl">拖入或选择古筝音频</span>
               <span className="mt-2 block max-w-[280px] text-sm leading-6 text-[#65745a]">
                 建议 10 秒以上；超过 60 秒时，系统只分析前 60 秒
               </span>
             </button>
 
-            <div className="mt-5 flex min-h-14 items-center justify-between gap-4 rounded-lg border border-white/60 bg-white/36 px-4 text-sm text-[#516146]">
+            <div className="mt-5 flex min-h-14 items-center justify-between gap-3 rounded-lg border border-white/60 bg-white/36 px-3 text-sm text-[#516146] md:gap-4 md:px-4">
               <span className="truncate">{currentFile}</span>
               <b className="shrink-0 font-medium text-[#9a7b3d]">{fileState}</b>
             </div>
@@ -476,9 +498,9 @@ export default function GuzhengExperience() {
             <audio ref={playerRef} controls className="mt-5 w-full" />
           </section>
 
-          <section className="dark-glass relative min-h-[480px] overflow-hidden rounded-lg p-5 text-paper">
+          <section className="dark-glass relative min-h-[330px] overflow-hidden rounded-lg p-4 text-paper md:min-h-[480px] md:p-5">
             {waveform?.waveform ? <WaveformCanvas data={waveform} /> : <IdleWaveform />}
-            <div className="absolute bottom-5 left-5 right-5 flex items-center gap-3 rounded-lg border border-white/20 bg-[#1f2b1b]/55 px-4 py-4 backdrop-blur-xl">
+            <div className="absolute bottom-4 left-4 right-4 flex items-center gap-3 rounded-lg border border-white/20 bg-[#1f2b1b]/62 px-4 py-3 backdrop-blur-xl md:bottom-5 md:left-5 md:right-5 md:py-4">
               <span className="h-2.5 w-2.5 rounded-full bg-[#f3d78c] shadow-[0_0_22px_rgba(243,215,140,0.9)]" />
               <p className="m-0 text-sm leading-6 text-white/78">{status}</p>
             </div>
@@ -486,7 +508,7 @@ export default function GuzhengExperience() {
         </div>
       </section>
 
-      <section id="samples" className="relative bg-[#edf3df] px-5 py-20 md:px-10">
+      <section id="samples" className="relative bg-[#edf3df] px-4 py-14 md:px-10 md:py-20">
         <SectionTitle eyebrow="Reference Archive" title="不同价位古筝声档" compact />
         <div className="mx-auto grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {referenceSamples.map((sample) => (
@@ -494,7 +516,7 @@ export default function GuzhengExperience() {
               key={sample.file}
               type="button"
               onClick={() => loadReferenceSample(sample)}
-              className={`group min-h-[190px] rounded-lg border p-5 text-left shadow-soft transition hover:-translate-y-1 ${
+              className={`group min-h-[160px] rounded-lg border p-4 text-left shadow-soft transition hover:-translate-y-1 md:min-h-[190px] md:p-5 ${
                 activeSample === sample.price
                   ? "border-[#caa96e] bg-white/82"
                   : "border-white/70 bg-white/52 hover:border-[#caa96e]/70 hover:bg-white/74"
@@ -511,7 +533,7 @@ export default function GuzhengExperience() {
         </div>
       </section>
 
-      <section ref={reportSectionRef} id="report" className="bg-[#f5efd9] px-5 py-20 md:px-10 md:py-24">
+      <section ref={reportSectionRef} id="report" className="bg-[#f5efd9] px-4 py-14 md:px-10 md:py-24">
         <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1fr_380px]">
           <ReportCard
             refTarget={reportCardRef}
@@ -523,7 +545,7 @@ export default function GuzhengExperience() {
             canExport={canExport}
           />
 
-          <aside className="glass-panel rounded-lg p-6">
+          <aside className="glass-panel rounded-lg p-5 md:p-6">
             <div className="mb-4 flex items-center justify-between gap-4">
               <span className="text-sm text-[#66755b]">频谱分析</span>
               <b className="text-sm font-medium text-[#a17a34]">{report.spectrumLabel}</b>
@@ -544,12 +566,12 @@ export default function GuzhengExperience() {
               <p className="mb-2 text-sm uppercase text-[#a17a34]">AI Detailed Review</p>
               <h2 className="text-2xl font-semibold text-[#25321f]">AI 具体分析报告</h2>
             </div>
-            <div className="flex justify-end">
+            <div className="flex justify-stretch md:justify-end">
               <button
                 type="button"
                 onClick={generateAiReport}
                 disabled={isAiLoading || !canGenerateAi}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#8ba079]/60 bg-[#5d7048] px-5 text-sm font-medium text-white shadow-soft transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#8ba079]/60 bg-[#5d7048] px-5 text-sm font-medium text-white shadow-soft transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45 md:w-auto"
               >
                 <Sparkles className="h-4 w-4" />
                 生成 AI 报告
@@ -558,11 +580,11 @@ export default function GuzhengExperience() {
           </div>
 
           <article ref={aiReportRef} className="overflow-hidden rounded-lg border border-white/70 bg-[#f5efd9] shadow-soft">
-            <div className="bg-gradient-to-br from-[#fffaf0] via-[#f3ead3] to-[#e0ebd4] p-6 md:p-8">
+            <div className="bg-gradient-to-br from-[#fffaf0] via-[#f3ead3] to-[#e0ebd4] p-5 md:p-8">
               <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-sm uppercase text-[#a17a34]">AI Detailed Review</p>
-                  <h3 className="mt-2 text-3xl font-semibold text-[#25321f]">古筝音色详细鉴赏</h3>
+                  <h3 className="mt-2 text-2xl font-semibold text-[#25321f] md:text-3xl">古筝音色详细鉴赏</h3>
                   <p className="mt-2 text-sm text-[#60734c]">
                     {aiReportReady ? `来源：${aiSource || "AI"} · 古筝置信度：${report.guzhengConfidence}/100` : "点击生成 AI 报告后，将显示完整图文结论。"}
                   </p>
@@ -572,23 +594,24 @@ export default function GuzhengExperience() {
 
             {aiReportReady ? (
               <>
-                <div className="bg-[#f5efd9] p-6 md:p-8">
-                  <div className="overflow-hidden rounded-lg border border-white/70 bg-white/62 p-3">
-                  <img src={reportImageUrl} alt="音色分析报告图片" className="w-full rounded-md" />
+                <div className="bg-[#f5efd9] p-3 md:p-8">
+                  <div className="overflow-hidden rounded-lg border border-white/70 bg-white/62 p-2 md:p-3">
+                  <img src={reportImageUrl} alt="音色分析报告图片" className="w-full max-w-full rounded-md" />
                   </div>
                 </div>
 
-                <div className="bg-[#f5efd9] px-6 pb-6 md:px-8 md:pb-8">
-                  <div className="grid gap-4 md:grid-cols-4">
+                <div className="bg-[#f5efd9] px-4 pb-5 md:px-8 md:pb-8">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
                     <MiniStat title="综合评分" value={report.score} />
-                    <MiniStat title="清亮度" value={report.dimensionScores.brightness} />
-                    <MiniStat title="共鸣厚度" value={report.dimensionScores.resonance} />
-                    <MiniStat title="颗粒质感" value={report.dimensionScores.texture} />
+                    <MiniStat title="音区均衡" value={report.dimensionScores.balance} />
+                    <MiniStat title="音色纯净" value={report.dimensionScores.purity} />
+                    <MiniStat title="共鸣表现" value={report.dimensionScores.resonance} />
+                    <MiniStat title="音色控制" value={report.dimensionScores.control} />
                   </div>
                 </div>
 
                 {report.segmentAnalyses?.length ? (
-                  <div className="grid gap-4 bg-[#f5efd9] px-6 pb-6 md:px-8 md:pb-8 lg:grid-cols-2">
+                  <div className="grid gap-4 bg-[#f5efd9] px-4 pb-5 md:px-8 md:pb-8 lg:grid-cols-2">
                     <ComparisonChartCard
                       title="频谱与动态"
                       text="每 10 秒对比频谱重心与动态范围，观察亮度和强弱层次是否稳定。"
@@ -596,15 +619,15 @@ export default function GuzhengExperience() {
                       <SegmentComparisonCanvas data={report.segmentAnalyses} mode="spectrumDynamic" />
                     </ComparisonChartCard>
                     <ComparisonChartCard
-                      title="共鸣与质感"
-                      text="每 10 秒对比共鸣时间与颗粒质感，观察尾音支撑和触弦清晰度。"
+                      title="共鸣与纯净"
+                      text="每 10 秒对比共鸣时间与音色纯净度，观察尾音支撑和杂散感变化。"
                     >
                       <SegmentComparisonCanvas data={report.segmentAnalyses} mode="resonanceTexture" />
                     </ComparisonChartCard>
                   </div>
                 ) : null}
 
-                <div className="grid gap-4 bg-[#f5efd9] p-6 md:p-8">
+                <div className="grid gap-4 bg-[#f5efd9] p-4 md:p-8">
                   {formattedAiReport.map((block, index) => (
                     <section
                       key={`${block.title}-${index}`}
@@ -617,8 +640,8 @@ export default function GuzhengExperience() {
                 </div>
               </>
             ) : (
-              <div className="bg-[#f5efd9] p-6 md:p-8">
-                <div className="rounded-lg border border-dashed border-[#c9b98e] bg-[#fbf6e8]/60 p-8 text-center text-sm text-[#6f7c61]">
+              <div className="bg-[#f5efd9] p-4 md:p-8">
+                <div className="rounded-lg border border-dashed border-[#c9b98e] bg-[#fbf6e8]/60 p-6 text-center text-sm text-[#6f7c61] md:p-8">
                   {isAiLoading ? "AI 正在生成图文报告，请稍候。" : "生成 AI 报告后，报告图片、评分、分段图表和具体结论会一起出现。"}
                 </div>
               </div>
@@ -626,21 +649,97 @@ export default function GuzhengExperience() {
           </article>
         </section>
       </section>
+
+      <section id="guide" className="relative bg-[#edf3df] px-4 py-14 md:px-10 md:py-24">
+        <SectionTitle
+          eyebrow="Care & Guide"
+          title="隐私政策、使用说明与新手选筝"
+          text="把音色检测、选琴判断和购买沟通放在同一处，方便你在试听、对比和决策时快速查阅。"
+        />
+
+        <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-2">
+          <FooterInfoCard icon={ShieldCheck} eyebrow="Privacy" title="隐私政策">
+            <p>最后更新时间：2026 年 7 月 2 日。</p>
+            <p>
+              本网页不会采集、保存或转存你的原始音频片段。基础音色分析在浏览器内完成；当你点击生成 AI 报告时，仅提交频谱、动态、共鸣、分段评分等结构化特征，不包含原始音频文件。
+            </p>
+            <p>联系方式仅用于答复咨询、购筝沟通或售后协助，不会用于无关营销转交。</p>
+          </FooterInfoCard>
+
+          <FooterInfoCard icon={BookOpenCheck} eyebrow="How To Use" title="使用说明">
+            <p>
+              音色评分会先判断音频是否接近古筝独奏，再截取前 60 秒并按每 10 秒分段解析，综合音区均衡、音色纯净、共鸣表现与音色控制四项生成结果。
+            </p>
+            <ol className="space-y-3 pl-5">
+              <li>
+                <b>逐弦轻拨，基础排查：</b>从低音到高音逐根轻拨，听是否有木头杂音、狼音、金属摩擦声，并留意单弦音准是否稳定。
+              </li>
+              <li>
+                <b>技巧试弹，测试衔接：</b>尝试托劈、刮奏、滑音与揉弦，重点感受高、中、低音区过渡是否顺滑，强弱变化是否可控。
+              </li>
+              <li>
+                <b>曲目试奏，整体感受：</b>用熟悉的入门旋律做整体试听，判断中音是否圆润、低音是否浑厚、高音是否清亮，多台琴对比会更直观。
+              </li>
+            </ol>
+          </FooterInfoCard>
+
+          <FooterInfoCard icon={Gem} eyebrow="Buying Notes" title="新手选筝">
+            <ul className="space-y-3 pl-5">
+              <li>
+                <b>看面板纹路：</b>优先选择纹理顺直、连贯、少杂乱砸纹的面板。面板等级通常决定声音上限，是判断音色基础的第一步。
+              </li>
+              <li>
+                <b>看侧板材质：</b>高端筝常用质感自然的硬木侧板，低端贴皮仿木纹会显得纹理重复、触感轻薄，可从纹理、色泽和触感对比。
+              </li>
+              <li>
+                <b>看品牌与品控：</b>有十年以上沉淀、具备稳定量产能力的品牌，通常更容易保证品质下限；认证、名家评价和真实用户反馈也值得参考。
+              </li>
+              <li>
+                <b>看预算匹配：</b>主流价位大多遵循一分钱一分货。初学建议尽量不要低于 4500-5000 元区间，这个价位更容易兼顾音色与手感。
+              </li>
+            </ul>
+            <p>
+              如果已经拥有一台古筝，不必过分纠结是否顶级。只要不是几百元的超低价产品，主流价位通常足够支持初、中级学习；适合自己、愿意长期练习，才是最重要的选择。
+            </p>
+          </FooterInfoCard>
+
+          <FooterInfoCard icon={Mail} eyebrow="Contact" title="联系方式">
+            <p>如需购买古筝、试听建议或选筝咨询，可以通过以下方式联系：</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <a
+                href="mailto:917801787@qq.com"
+                className="inline-flex min-w-0 items-center gap-3 rounded-lg border border-white/70 bg-white/50 px-4 py-3 text-sm font-medium text-[#2f3b28] transition hover:-translate-y-0.5 hover:bg-white/72 sm:text-base"
+              >
+                <Mail className="h-4 w-4 shrink-0 text-[#a17a34]" />
+                <span className="min-w-0 break-all">917801787@qq.com</span>
+              </a>
+              <a
+                href="tel:17370002516"
+                className="inline-flex min-w-0 items-center gap-3 rounded-lg border border-white/70 bg-white/50 px-4 py-3 text-sm font-medium text-[#2f3b28] transition hover:-translate-y-0.5 hover:bg-white/72 sm:text-base"
+              >
+                <Phone className="h-4 w-4 shrink-0 text-[#a17a34]" />
+                <span className="min-w-0 break-all">17370002516</span>
+              </a>
+            </div>
+            <p className="text-sm text-[#6b775f]">建议沟通时说明预算、学习阶段、偏好的音色方向，以及是否需要适配儿童或成人初学。</p>
+          </FooterInfoCard>
+        </div>
+      </section>
     </main>
   );
 }
 
 function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canExport }) {
   return (
-    <section ref={refTarget} className="glass-panel rounded-lg p-6 md:p-7">
+    <section ref={refTarget} className="glass-panel rounded-lg p-5 md:p-7">
       <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="mb-3 text-sm uppercase text-[#a17a34]">AI Timbre Report</p>
-          <h2 className="text-3xl font-semibold text-[#25321f] md:text-5xl">音色分析报告</h2>
+          <h2 className="text-[32px] font-semibold leading-tight text-[#25321f] md:text-5xl">音色分析报告</h2>
         </div>
-        <div className="grid h-28 w-28 shrink-0 place-items-center rounded-full bg-[conic-gradient(from_-90deg,#caa96e_var(--score),rgba(106,125,85,.16)_0)] text-[#25321f]" style={scoreStyle}>
-          <div className="grid h-[86px] w-[86px] place-items-center rounded-full bg-[#f9f2df]">
-            <span className="text-3xl font-bold">{report.score}</span>
+        <div className="grid h-24 w-24 shrink-0 place-items-center rounded-full bg-[conic-gradient(from_-90deg,#caa96e_var(--score),rgba(106,125,85,.16)_0)] text-[#25321f] md:h-28 md:w-28" style={scoreStyle}>
+          <div className="grid h-[74px] w-[74px] place-items-center rounded-full bg-[#f9f2df] md:h-[86px] md:w-[86px]">
+            <span className="text-2xl font-bold md:text-3xl">{report.score}</span>
             <small className="-mt-6 text-xs text-[#718064]">/100</small>
           </div>
         </div>
@@ -657,7 +756,7 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
         ))}
       </div>
 
-      <p className="mt-5 rounded-lg border border-white/65 bg-white/42 p-5 text-lg leading-9 text-[#35402d]">
+      <p className="mt-5 rounded-lg border border-white/65 bg-white/42 p-4 text-base leading-8 text-[#35402d] md:p-5 md:text-lg md:leading-9">
         {report.summary}
       </p>
 
@@ -668,13 +767,14 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <ScoreCard title="清亮度" value={report.dimensionScores.brightness} />
-        <ScoreCard title="共鸣厚度" value={report.dimensionScores.resonance} />
-        <ScoreCard title="颗粒质感" value={report.dimensionScores.texture} />
+      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <ScoreCard title="音区均衡" value={report.dimensionScores.balance} />
+        <ScoreCard title="音色纯净" value={report.dimensionScores.purity} />
+        <ScoreCard title="共鸣表现" value={report.dimensionScores.resonance} />
+        <ScoreCard title="音色控制" value={report.dimensionScores.control} />
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-5">
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
         <Metric title="古筝置信度" value={`${report.guzhengConfidence}/100`} text="预检结果" />
         <Metric title="动态范围" value={report.dynamicValue} text={report.dynamicText} />
         <Metric title="共鸣时间" value={report.resonanceValue} text={report.resonanceText} />
@@ -683,16 +783,16 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
       </div>
 
       <div className="mt-4 rounded-lg border border-[#d9e2ca] bg-white/38 px-4 py-3 text-sm leading-6 text-[#5c6b51]">
-        古筝质检基于参考声档声纹相似度、频谱重心、中高频比例、拨弦瞬态、尾音衰减与动态范围综合估算。
+        音色评分基于音区均衡、音色纯净、共鸣表现与音色控制四项综合估算；参考声档仅辅助定位声学轮廓，不按价格直接给高分。
       </div>
 
       {report.segmentAnalyses?.length ? (
-        <section className="mt-5 rounded-lg border border-white/65 bg-white/36 p-4">
+        <section className="mt-5 rounded-lg border border-white/65 bg-white/36 p-3 md:p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-[#25321f]">10 秒分段解析</h3>
             <span className="whitespace-nowrap text-sm text-[#8a6d35]">{report.segmentAnalyses.length} 段</span>
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
             {report.segmentAnalyses.map((segment) => (
               <article key={segment.index} className="rounded-lg border border-[#dfe5d3] bg-white/45 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2 text-sm">
@@ -702,10 +802,11 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
                   <span className="text-[#60734c]">{segment.centroidHz} Hz</span>
                 </div>
                 <p className="text-sm leading-6 text-[#526449]">{segment.summary}</p>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs text-[#66755b]">
-                  <span className="rounded-md bg-[#eef3e5] px-2 py-1">亮 {segment.brightness}</span>
-                  <span className="rounded-md bg-[#f4ecd8] px-2 py-1">鸣 {segment.resonance}</span>
-                  <span className="rounded-md bg-[#eef3e5] px-2 py-1">粒 {segment.texture}</span>
+                <div className="mt-2 grid grid-cols-4 gap-1 text-center text-[11px] text-[#66755b] sm:gap-2 sm:text-xs">
+                  <span className="rounded-md bg-[#eef3e5] px-1.5 py-1 sm:px-2">衡 {segment.balance}</span>
+                  <span className="rounded-md bg-[#f4ecd8] px-1.5 py-1 sm:px-2">净 {segment.purity}</span>
+                  <span className="rounded-md bg-[#eef3e5] px-1.5 py-1 sm:px-2">鸣 {segment.resonance}</span>
+                  <span className="rounded-md bg-[#f4ecd8] px-1.5 py-1 sm:px-2">控 {segment.control}</span>
                 </div>
               </article>
             ))}
@@ -726,12 +827,12 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
         </InfoBox>
       </div>
 
-      <div data-export-hidden="true" className="mt-5 flex justify-end">
+      <div data-export-hidden="true" className="mt-5 flex justify-stretch sm:justify-end">
         <button
           type="button"
           onClick={onExport}
           disabled={isExporting || !canExport}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#caa96e]/60 bg-white/60 px-5 text-sm font-medium text-[#5d4a24] shadow-soft transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#caa96e]/60 bg-white/60 px-5 text-sm font-medium text-[#5d4a24] shadow-soft transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
         >
           <ImageDown className="h-4 w-4" />
           导出报告图片
@@ -793,19 +894,36 @@ function SectionTitle({ eyebrow, title, text, compact = false }) {
   return (
     <div className={`mx-auto max-w-3xl text-center ${compact ? "mb-10" : "mb-12"}`}>
       <p className="mb-3 text-sm uppercase text-[#a17a34]">{eyebrow}</p>
-      <h2 className="text-3xl font-semibold leading-tight text-[#25321f] md:text-5xl">{title}</h2>
-      {text ? <p className="mx-auto mt-5 max-w-2xl text-[16px] leading-8 text-[#65745a]">{text}</p> : null}
+      <h2 className="text-[28px] font-semibold leading-tight text-[#25321f] sm:text-3xl md:text-5xl">{title}</h2>
+      {text ? <p className="mx-auto mt-4 max-w-2xl text-[15px] leading-8 text-[#65745a] md:mt-5 md:text-[16px]">{text}</p> : null}
     </div>
+  );
+}
+
+function FooterInfoCard({ icon: Icon, eyebrow, title, children }) {
+  return (
+    <article className="glass-panel rounded-lg p-5 md:p-7">
+      <div className="mb-5 flex items-center gap-4">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[#caa96e]/45 bg-[#fff7e6]/70 text-[#8a6d35] md:h-12 md:w-12">
+          <Icon className="h-5 w-5" strokeWidth={1.8} />
+        </span>
+        <div>
+          <p className="text-xs uppercase tracking-[0.16em] text-[#a17a34]">{eyebrow}</p>
+          <h3 className="mt-1 text-xl font-semibold text-[#25321f] md:text-2xl">{title}</h3>
+        </div>
+      </div>
+      <div className="space-y-4 text-[14px] leading-8 text-[#526449] md:text-[15px]">{children}</div>
+    </article>
   );
 }
 
 function ScoreCard({ title, value }) {
   const numeric = Number(value) || 0;
   return (
-    <article className="rounded-lg border border-white/65 bg-white/42 p-4">
+    <article className="rounded-lg border border-white/65 bg-white/42 p-3 md:p-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-[#66755b]">{title}</span>
-        <b className="text-2xl text-[#9a7b3d]">{value}</b>
+        <b className="text-xl text-[#9a7b3d] md:text-2xl">{value}</b>
       </div>
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#dfe8d0]">
         <div className="h-full rounded-full bg-gradient-to-r from-[#7d9b85] to-[#caa96e]" style={{ width: `${numeric}%` }} />
@@ -816,9 +934,9 @@ function ScoreCard({ title, value }) {
 
 function Metric({ title, value, text }) {
   return (
-    <article className="rounded-lg border border-white/65 bg-white/42 p-4">
+    <article className="rounded-lg border border-white/65 bg-white/42 p-3 md:p-4">
       <span className="text-sm text-[#66755b]">{title}</span>
-      <strong className="mt-3 block text-xl leading-tight text-[#9a7b3d]">{value}</strong>
+      <strong className="mt-3 block text-lg leading-tight text-[#9a7b3d] md:text-xl">{value}</strong>
       <p className="mt-2 text-sm leading-6 text-[#5c6b51]">{text}</p>
     </article>
   );
@@ -841,16 +959,16 @@ function formatSeconds(value) {
 
 function MiniStat({ title, value }) {
   return (
-    <div className="rounded-lg border border-white/70 bg-white/55 p-4">
+    <div className="rounded-lg border border-white/70 bg-white/55 p-3 md:p-4">
       <span className="text-sm text-[#65745a]">{title}</span>
-      <b className="mt-2 block text-2xl text-[#9a7b3d]">{value}</b>
+      <b className="mt-2 block text-xl text-[#9a7b3d] md:text-2xl">{value}</b>
     </div>
   );
 }
 
 function ComparisonChartCard({ title, text, children }) {
   return (
-    <section className="rounded-lg border border-white/70 bg-white/58 p-4">
+    <section className="rounded-lg border border-white/70 bg-white/58 p-3 md:p-4">
       <div className="mb-3">
         <h5 className="text-base font-semibold text-[#25321f]">{title}</h5>
         <p className="mt-1 text-sm leading-6 text-[#60734c]">{text}</p>
@@ -924,7 +1042,7 @@ function SegmentComparisonCanvas({ data, mode }) {
             ]
           : [
               { name: "共鸣时间", unit: "秒", color: "#b88b3d", values: points.map((item) => item.resonanceSeconds), min: 1.8, max: 6.4 },
-              { name: "颗粒质感", unit: "分", color: "#5d7048", values: points.map((item) => item.texture), min: 35, max: 100 },
+              { name: "音色纯净", unit: "分", color: "#5d7048", values: points.map((item) => item.purity ?? item.texture), min: 35, max: 100 },
             ];
 
       ctx.textAlign = "left";
@@ -991,7 +1109,7 @@ function SegmentComparisonCanvas({ data, mode }) {
     };
   }, [data, mode]);
 
-  return <canvas ref={canvasRef} className="h-[260px] w-full rounded-lg border border-white/70 bg-white/38" />;
+  return <canvas ref={canvasRef} className="h-[220px] w-full rounded-lg border border-white/70 bg-white/38 md:h-[260px]" />;
 }
 
 function clampClient(value, min, max) {
@@ -1269,7 +1387,7 @@ function SpectrumCanvas({ spectrum }) {
     ctx.fillText("高频", left + plotWidth * 0.86, bottom + 10 * ratio);
   }, [spectrum]);
 
-  return <canvas ref={canvasRef} className="pointer-events-none h-[360px] w-full select-none rounded-lg border border-white/70 bg-white/40" />;
+  return <canvas ref={canvasRef} className="pointer-events-none h-[260px] w-full select-none rounded-lg border border-white/70 bg-white/40 md:h-[360px]" />;
 }
 
 function formatAiReport(text) {
@@ -1280,7 +1398,7 @@ function formatAiReport(text) {
     .split(/\n{2,}|(?<=。)\s*(?=[一二三四五六七八九十]、)/)
     .map((item) => item.trim())
     .filter(Boolean);
-  const titles = ["综合判断", "频谱与动态", "共鸣与质感", "曲风适配", "综合评价"];
+  const titles = ["综合判断", "频谱与动态", "共鸣与纯净", "曲风适配", "综合评价"];
   return (paragraphs.length ? paragraphs : [clean]).map((body, index) => ({
     title: titles[index] || `分析要点 ${index + 1}`,
     body: sanitizeAiText(body).replace(/^#+\s*/, "").replace(/^\d+[.、]\s*/, ""),

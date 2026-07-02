@@ -71,7 +71,7 @@ export async function POST(request) {
           },
           {
             role: "user",
-            content: `请分析这段古筝音频。要求：分维度阐述清亮度、共鸣厚度、颗粒质感、动态层次、频谱结构、曲风适配，最后给综合评价。请重点解读 spectrumDetail、lowRatio、midRatio、highRatio、spectralCentroidHz 和 segmentAnalyses，说明每 10 秒一段的音色变化趋势。若 analysisWindow.trimmedToFirst60Seconds 为 true，请说明只分析了前 60 秒。控制在 450-650 字。\n\n音频特征：${JSON.stringify(
+            content: `请分析这段古筝音频。要求：围绕音区均衡、音色纯净、共鸣表现、音色控制四项评分展开，再补充频谱结构、每 10 秒分段趋势、曲风适配和综合评价。请重点解读 spectrumDetail、lowRatio、midRatio、highRatio、spectralCentroidHz、dimensionScores 和 segmentAnalyses；说明评分只能依据音频特征推断，音色控制是动态、瞬态和触弦对比的声音侧指标，不要假装直接测量琴码手感。若 analysisWindow.trimmedToFirst60Seconds 为 true，请说明只分析了前 60 秒。控制在 450-650 字。\n\n音频特征：${JSON.stringify(
               context,
               null,
               2,
@@ -145,8 +145,12 @@ function checkRateLimit(clientIp) {
 }
 
 function buildFallbackReport(context) {
-  const { dimensionScores, dynamicDb, resonanceSeconds, spectralCentroidHz, lowRatio, midRatio, highRatio } = context;
-  const resonanceGood = dimensionScores.resonance >= 84;
+  const { dimensionScores = {}, dynamicDb, resonanceSeconds, spectralCentroidHz, lowRatio, midRatio, highRatio } = context;
+  const balanceScore = dimensionScores.balance ?? dimensionScores.brightness ?? "--";
+  const purityScore = dimensionScores.purity ?? dimensionScores.texture ?? "--";
+  const resonanceScore = dimensionScores.resonance ?? "--";
+  const controlScore = dimensionScores.control ?? "--";
+  const resonanceGood = Number(resonanceScore) >= 84;
   const dynamicGood = dynamicDb >= 15;
   const tailGood = resonanceSeconds >= 4.2;
   const segments = Array.isArray(context.segmentAnalyses) ? context.segmentAnalyses : [];
@@ -160,7 +164,7 @@ function buildFallbackReport(context) {
     : "";
 
   return [
-    `综合来看，这段声音的核心优势在于${resonanceGood ? "共鸣延展和声底稳定性" : "清晰的音头与自然的声部过渡"}。三项主评分中，清亮度 ${dimensionScores.brightness} 分，共鸣厚度 ${dimensionScores.resonance} 分，颗粒质感 ${dimensionScores.texture} 分，整体呈现出${context.inferredWood}取向的声学性格。${windowText}`,
+    `综合来看，这段声音的核心优势在于${resonanceGood ? "共鸣延展和声底稳定性" : "清晰的音头与自然的声部过渡"}。四项主评分中，音区均衡 ${balanceScore} 分，音色纯净 ${purityScore} 分，共鸣表现 ${resonanceScore} 分，音色控制 ${controlScore} 分；其中音色控制是依据动态范围、瞬态和触弦对比推断的声音侧指标。整体呈现出${context.inferredWood}取向的声学性格。${windowText}`,
     `频谱方面，重心约 ${spectralCentroidHz} Hz，低频占比 ${Math.round(lowRatio * 100)}%，中频占比 ${Math.round(midRatio * 100)}%，高频占比 ${Math.round(highRatio * 100)}%。${context.spectrumDetail || "这说明声音在泛音明度、木质厚度和中频支撑之间形成当前平衡。"}动态范围约 ${dynamicDb} dB，${dynamicGood ? "强弱对比具备舞台表达空间" : "层次变化较温和，适合细腻表达"}。`,
     `分段观察：${segmentSummary}。这些变化可以帮助判断音色是否在连续演奏中保持稳定，也能看出高频亮度与尾音支撑是否随段落发生漂移。`,
     `共鸣时间约 ${resonanceSeconds} 秒，${tailGood ? "尾音有较好的留白和空间感" : "尾音收束较快，声音干净但气息略短"}。曲风上更适合${context.styleFit} 综合评价：这张琴的声音气质清雅、辨识度较高，适合以音色细节和余韵审美取胜；若用于大动态曲风，需要进一步关注低频承托和高频锐度控制。`,

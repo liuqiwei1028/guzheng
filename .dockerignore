@@ -1,0 +1,12 @@
+.git
+.next
+node_modules
+logs
+.env
+.env.local
+.env.production
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+AI古筝音色详细报告.pdf
+*.psd
