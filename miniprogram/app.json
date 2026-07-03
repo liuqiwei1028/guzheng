@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/webview/webview"
+  ],
+  "window": {
+    "navigationBarTitleText": "古筝 AI 音色鉴赏",
+    "navigationBarBackgroundColor": "#f5efd9",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f5efd9"
+  },
+  "sitemapLocation": "sitemap.json"
+}

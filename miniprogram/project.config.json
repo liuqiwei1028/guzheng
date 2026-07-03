@@ -1,0 +1,15 @@
+{
+  "description": "古筝 AI 音色鉴赏小程序",
+  "appid": "touristappid",
+  "projectname": "guzheng-timbre-miniprogram",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "coverView": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "latest"
+}

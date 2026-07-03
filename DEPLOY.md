@@ -34,6 +34,9 @@ cp .env.production.example .env.production
 ```bash
 DEEPSEEK_API_KEY=你的真实Key
 DEEPSEEK_MODEL=deepseek-chat
+WECHAT_APPID=你的小程序AppID
+WECHAT_APPSECRET=你的小程序AppSecret
+MINIPROGRAM_SESSION_SECRET=建议使用 openssl rand -hex 32 生成
 ```
 
 ### 3. 构建并启动 Next.js
@@ -117,6 +120,25 @@ npm run build
 pm2 restart guzheng-timbre-studio
 ```
 
+## 6. 微信小程序配置
+
+小程序代码位于 `miniprogram/` 目录。
+
+开发者工具配置：
+
+1. 用微信开发者工具导入 `miniprogram/`。
+2. 将 `miniprogram/project.config.json` 中的 `appid` 改成真实小程序 AppID。
+3. 将 `miniprogram/config.js` 中的 `apiBaseUrl` 和 `webviewUrl` 改成正式 HTTPS 域名。
+4. 在微信公众平台配置：
+   - request 合法域名：正式 HTTPS 域名
+   - 业务域名：正式 HTTPS 域名，用于 `web-view`
+
+登录说明：
+
+- 微信登录使用小程序 `wx.login`，服务端通过微信 `code2Session` 换取 openid。
+- 手机号登录使用 `button open-type="getPhoneNumber"` 获取一次性 code，服务端换取手机号后只写入脱敏手机号和哈希，不保存原始手机号。
+- 登录成功后，小程序进入 `web-view`，加载已部署的网页功能页。
+
 ## 方案二：Docker 部署
 
 ```bash
@@ -127,6 +149,9 @@ docker run -d \
   -p 127.0.0.1:3000:3000 \
   -e DEEPSEEK_API_KEY=你的真实Key \
   -e DEEPSEEK_MODEL=deepseek-chat \
+  -e WECHAT_APPID=你的小程序AppID \
+  -e WECHAT_APPSECRET=你的小程序AppSecret \
+  -e MINIPROGRAM_SESSION_SECRET=请使用随机长字符串 \
   guzheng-timbre-studio
 ```
 

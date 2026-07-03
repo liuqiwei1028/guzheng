@@ -1,0 +1,81 @@
+.page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 96rpx 36rpx 60rpx;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(245, 239, 217, 0.88)),
+    #f5efd9;
+}
+
+.hero {
+  padding-top: 80rpx;
+  text-align: center;
+}
+
+.eyebrow {
+  color: #a17a34;
+  font-size: 24rpx;
+  letter-spacing: 5rpx;
+}
+
+.title {
+  margin-top: 28rpx;
+  color: #25321f;
+  font-size: 54rpx;
+  font-weight: 700;
+  line-height: 1.22;
+}
+
+.desc {
+  margin: 28rpx auto 0;
+  max-width: 580rpx;
+  color: #65745a;
+  font-size: 29rpx;
+  line-height: 1.8;
+}
+
+.panel {
+  margin-top: 80rpx;
+  padding: 40rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.7);
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 34rpx 100rpx rgba(58, 74, 43, 0.14);
+}
+
+.primary-btn,
+.phone-btn {
+  height: 92rpx;
+  line-height: 92rpx;
+  font-size: 31rpx;
+  font-weight: 600;
+}
+
+.primary-btn {
+  color: #fff;
+  background: #5d7048;
+}
+
+.phone-btn {
+  margin-top: 24rpx;
+  color: #2d2413;
+  background: linear-gradient(90deg, #fff0c8, #cda75d);
+}
+
+.tip {
+  margin-top: 24rpx;
+  color: #7a866d;
+  font-size: 24rpx;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.message {
+  margin-top: 28rpx;
+  padding: 22rpx 26rpx;
+  border-radius: 16rpx;
+  color: #7a3d28;
+  background: rgba(255, 238, 222, 0.9);
+  font-size: 26rpx;
+  line-height: 1.7;
+}
