@@ -1,7 +1,7 @@
 <view class="page">
   <view class="hero">
-    <view class="eyebrow">GUZHENG TIMBRE AI</view>
-    <view class="title">古筝 AI 音色鉴赏</view>
+    <view class="eyebrow">ZHENGYIN HUIJIAN</view>
+    <view class="title">筝音慧鉴</view>
     <view class="desc">请先使用微信或手机号登录，登录后即可进入音色分析、声档对比和 AI 报告。</view>
   </view>
 

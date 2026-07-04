@@ -559,10 +559,10 @@ export default function GuzhengExperience() {
         <div className="relative z-10 flex min-h-[100svh] items-center justify-center px-4 pb-24 pt-24 md:justify-end md:px-[9vw] md:pb-20">
           <div className="w-full max-w-[500px] text-center md:mt-4">
             <p className="hero-copy-glow mb-4 text-[12px] uppercase tracking-[0.12em] text-[#f3d78c] sm:text-sm sm:tracking-[0.18em]">
-              Guzheng Timbre Intelligence
+              Zhengyin Huijian
             </p>
             <h1 className="hero-title-glow mx-auto max-w-[520px] text-[42px] font-semibold leading-tight text-[#fff7e6] sm:text-5xl md:text-6xl">
-              古筝 AI 音色鉴赏
+              筝音慧鉴
             </h1>
             <p className="hero-copy-glow mx-auto mt-5 max-w-[430px] text-base leading-8 text-[#fff1c6] md:mt-6 md:text-[20px] md:leading-9">
               以频谱、共鸣、动态与木质感为线索，听见一张古筝真正的气质。

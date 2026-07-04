@@ -4,7 +4,7 @@
     "pages/webview/webview"
   ],
   "window": {
-    "navigationBarTitleText": "古筝 AI 音色鉴赏",
+    "navigationBarTitleText": "筝音慧鉴",
     "navigationBarBackgroundColor": "#f5efd9",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#f5efd9"
