@@ -43,7 +43,7 @@ const initialReport = {
   deepseekContext: null,
 };
 
-export default function GuzhengExperience() {
+export default function GuzhengExperience({ isMiniProgramShell = false }) {
   const [report, setReport] = useState(initialReport);
   const [status, setStatus] = useState("等待第一段声音进入鉴赏台");
   const [currentFile, setCurrentFile] = useState("尚未载入音频");
@@ -53,7 +53,8 @@ export default function GuzhengExperience() {
   const [aiSource, setAiSource] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [introVisible, setIntroVisible] = useState(true);
+  const [isMiniProgramView, setIsMiniProgramView] = useState(isMiniProgramShell);
+  const [introVisible, setIntroVisible] = useState(!isMiniProgramShell);
   const [introLeaving, setIntroLeaving] = useState(false);
   const [activeSection, setActiveSection] = useState("");
   const [aiReportReady, setAiReportReady] = useState(false);
@@ -85,6 +86,24 @@ export default function GuzhengExperience() {
       setIntroVisible(false);
     }, 1100);
   }, []);
+
+  useEffect(() => {
+    if (isMiniProgramShell) {
+      introFinishedRef.current = true;
+      setIsMiniProgramView(true);
+      setIntroVisible(false);
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const userAgent = navigator.userAgent || "";
+    const inMiniProgram = params.get("mp") === "1" || params.get("client") === "miniprogram" || /miniProgram/i.test(userAgent);
+    if (inMiniProgram) {
+      introFinishedRef.current = true;
+      setIsMiniProgramView(true);
+      setIntroVisible(false);
+    }
+  }, [isMiniProgramShell]);
 
   useEffect(() => {
     const audio = musicRef.current;
@@ -465,7 +484,7 @@ export default function GuzhengExperience() {
   return (
     <main className="min-h-screen overflow-hidden bg-[#f5efd9] pb-24 text-ink md:pb-0">
       <audio ref={musicRef} src="/bg-music.flac" preload="metadata" />
-      {introVisible ? <IntroOverlay leaving={introLeaving} onDone={finishIntro} /> : null}
+      {introVisible && !isMiniProgramView ? <IntroOverlay leaving={introLeaving} onDone={finishIntro} /> : null}
 
       <header
         className="fixed left-0 right-0 top-0 z-40 flex items-center justify-between px-4 py-4 transition duration-500 md:px-10 md:py-5"
@@ -514,17 +533,19 @@ export default function GuzhengExperience() {
 
       <section className="relative min-h-[100svh] overflow-hidden">
         <div className="absolute inset-0 bg-[url('/hero-bg.png')] bg-cover bg-[38%_center] md:bg-center" />
-        <video
-          className="absolute inset-0 h-full w-full object-cover"
-          src="/bg.mp4"
-          poster="/hero-bg.png"
-          muted
-          playsInline
-          autoPlay
-          loop
-          preload="auto"
-          aria-hidden="true"
-        />
+        {!isMiniProgramView ? (
+          <video
+            className="absolute inset-0 h-full w-full object-cover"
+            src="/bg.mp4"
+            poster="/hero-bg.png"
+            muted
+            playsInline
+            autoPlay
+            loop
+            preload="auto"
+            aria-hidden="true"
+          />
+        ) : null}
         <div className="hero-breathe absolute inset-0 bg-gradient-to-b from-white/18 via-white/0 to-[#f5efd9]" />
         <div className="absolute inset-y-0 right-0 w-[68vw] bg-gradient-to-l from-[#142014]/72 via-[#213018]/34 to-transparent" />
         <div className="hero-mist absolute inset-x-[-12%] top-[13%] h-40 bg-gradient-to-r from-transparent via-white/34 to-transparent blur-2xl" />

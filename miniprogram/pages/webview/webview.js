@@ -15,7 +15,7 @@ Page({
 
     try {
       await request("/api/miniprogram/me");
-      this.setData({ src: config.webviewUrl });
+      this.setData({ src: withMiniProgramFlag(config.webviewUrl) });
     } catch {
       clearSession();
       this.redirectToLogin();
@@ -26,3 +26,8 @@ Page({
     wx.reLaunch({ url: "/pages/login/login" });
   },
 });
+
+function withMiniProgramFlag(url) {
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}mp=1`;
+}
