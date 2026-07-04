@@ -181,7 +181,7 @@ export default function GuzhengExperience() {
   async function analyzeArrayBuffer(arrayBuffer, sourceName, sampleMeta, sourceFile = null) {
     try {
       if (sourceFile && isVideoLikeFile(sourceFile)) {
-        await analyzeMediaOnServer(sourceFile);
+        rejectUnsupportedVideo();
         return;
       }
 
@@ -236,17 +236,17 @@ export default function GuzhengExperience() {
       console.error(error);
       setStatus("浏览器无法解码这段音频，请换用 WAV、MP3、M4A 或 FLAC 文件。");
       setFileState("失败");
-      if (sourceFile && isServerMediaFallbackCandidate(sourceFile)) {
-        console.warn("本地解码失败，切换服务端媒体解析。", error);
+      if (sourceFile && isServerAudioFallbackCandidate(sourceFile)) {
+        console.warn("本地解码失败，切换服务端音频解析。", error);
         await analyzeMediaOnServer(sourceFile);
       }
     }
   }
 
   async function analyzeMediaOnServer(file) {
-    setStatus("正在从视频/媒体文件中抽取音轨，并进行古筝音色预检...");
-    setFileState("抽取音轨");
-    setAiReport("AI 正在等待媒体音轨解析结果。");
+    setStatus("正在使用服务端音频解码，并进行古筝音色预检...");
+    setFileState("解码中");
+    setAiReport("AI 正在等待音频解析结果。");
     setAiSource("");
     setReportImageUrl("");
     setExportPreviewUrl("");
@@ -262,7 +262,7 @@ export default function GuzhengExperience() {
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || `媒体解析失败：HTTP ${response.status}`);
+        throw new Error(data.error || `音频解析失败：HTTP ${response.status}`);
       }
 
       setWaveform(data.waveform || null);
@@ -273,12 +273,12 @@ export default function GuzhengExperience() {
       if (data.report?.score === "--") {
         setStatus(`未通过古筝音色预检，置信度 ${data.report.guzhengConfidence}/100。`);
         setFileState("未评分");
-        setAiReport("媒体音轨未通过古筝声音预检，因此不会生成正式评分。建议上传古筝独奏、少混响、少环境噪声的视频或音频。");
+        setAiReport("音频未通过古筝声音预检，因此不会生成正式评分。建议上传古筝独奏、少混响、少环境噪声的录音。");
         setAiSource("AI 预检");
       } else {
         setStatus(
-          `分析完成，古筝置信度 ${data.report.guzhengConfidence}/100。已从媒体音轨取前 ${Math.round(media.analyzedDuration || MAX_ANALYSIS_SECONDS)} 秒分析${
-            media.wasTrimmed ? "，后续音轨已自动舍弃。" : "。"
+          `分析完成，古筝置信度 ${data.report.guzhengConfidence}/100。已取前 ${Math.round(media.analyzedDuration || MAX_ANALYSIS_SECONDS)} 秒音频分析${
+            media.wasTrimmed ? "，后续音频已自动舍弃。" : "。"
           }`,
         );
         setFileState("已完成");
@@ -289,7 +289,7 @@ export default function GuzhengExperience() {
       scrollToReport();
     } catch (error) {
       console.error(error);
-      setStatus(error.message || "媒体音轨解析失败，请换用 MP4、MOV、M4A、MP3、WAV 或 FLAC。");
+      setStatus(error.message || "音频解析失败，请换用 M4A、MP3、WAV 或 FLAC。");
       setFileState("失败");
     }
   }
@@ -335,19 +335,37 @@ export default function GuzhengExperience() {
     setAiReportReady(true);
   }
 
+  function rejectUnsupportedVideo() {
+    setFileState("不支持");
+    setStatus("当前版本仅支持音频文件。请先从视频中导出 M4A、MP3、WAV 或 FLAC 音频后再上传。");
+    setWaveform(null);
+    setSpectrum(null);
+    setReport(initialReport);
+    setAiReport("为节省服务器带宽与解析时间，视频文件不会上传分析。");
+    setAiSource("");
+    setReportImageUrl("");
+    setExportPreviewUrl("");
+    setExportHint("");
+    setAiReportReady(false);
+    if (playerRef.current) {
+      playerRef.current.removeAttribute("src");
+      playerRef.current.load();
+    }
+  }
+
   async function handleUserFile(file) {
     if (!file) return;
     setActiveSample(null);
     setCurrentFile(file.name);
+    if (isVideoLikeFile(file)) {
+      rejectUnsupportedVideo();
+      return;
+    }
     setFileState("分析中");
     setStatus("正在读取上传音频...");
     if (playerRef.current) {
       playerRef.current.src = URL.createObjectURL(file);
       playerRef.current.load();
-    }
-    if (isVideoLikeFile(file)) {
-      await analyzeMediaOnServer(file);
-      return;
     }
     await analyzeArrayBuffer(await file.arrayBuffer(), file.name, parseSampleName(file.name), file);
   }
@@ -577,7 +595,7 @@ export default function GuzhengExperience() {
               <input
                 ref={uploadInputRef}
                 type="file"
-                accept="audio/*,video/*,.flac,.wav,.mp3,.m4a,.ogg,.mp4,.mov,.m4v,.avi,.webm"
+                accept="audio/*,.flac,.wav,.mp3,.m4a,.aac,.ogg,.opus"
                 className="hidden"
                 onChange={(event) => handleUserFile(event.target.files?.[0])}
               />
@@ -586,7 +604,7 @@ export default function GuzhengExperience() {
               </span>
               <span className="mt-4 block text-lg font-semibold text-[#2d3826] md:mt-5 md:text-xl">拖入或选择古筝音频</span>
               <span className="mt-2 block max-w-[280px] text-sm leading-6 text-[#65745a]">
-                支持音频或含音轨的视频；超过 60 秒时，系统只分析前 60 秒
+                仅支持音频文件；超过 60 秒时，系统只分析前 60 秒
               </span>
             </button>
 
@@ -1879,13 +1897,12 @@ function isVideoLikeFile(file) {
   return type.startsWith("video/") || /\.(mp4|mov|m4v|avi|webm|mkv|3gp)$/i.test(name);
 }
 
-function isServerMediaFallbackCandidate(file) {
+function isServerAudioFallbackCandidate(file) {
   const type = file?.type || "";
   const name = file?.name || "";
   return (
-    isVideoLikeFile(file) ||
-    type.startsWith("audio/") ||
-    /\.(flac|wav|mp3|m4a|aac|ogg|opus|mp4|mov|m4v|avi|webm|mkv|3gp)$/i.test(name)
+    !isVideoLikeFile(file) &&
+    (type.startsWith("audio/") || /\.(flac|wav|mp3|m4a|aac|ogg|opus)$/i.test(name))
   );
 }
 

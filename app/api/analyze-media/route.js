@@ -19,7 +19,7 @@ import { decodeMediaBufferToMono } from "@/lib/serverMediaAudio";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const MAX_UPLOAD_BYTES = 220 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
 let referenceProfilesPromise = null;
 
 export async function POST(request) {
@@ -27,14 +27,18 @@ export async function POST(request) {
     const formData = await request.formData();
     const file = formData.get("file");
     if (!file || typeof file.arrayBuffer !== "function") {
-      return NextResponse.json({ error: "缺少媒体文件" }, { status: 400 });
+      return NextResponse.json({ error: "缺少音频文件" }, { status: 400 });
+    }
+
+    const filename = file.name || "upload.audio";
+    if (!isSupportedAudioFile(file, filename)) {
+      return NextResponse.json({ error: "当前仅支持音频文件，请上传 M4A、MP3、WAV、FLAC、AAC、OGG 或 OPUS。" }, { status: 415 });
     }
 
     if (file.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json({ error: "文件过大，请上传 220MB 以内的视频或音频" }, { status: 413 });
+      return NextResponse.json({ error: "文件过大，请上传 40MB 以内的音频文件" }, { status: 413 });
     }
 
-    const filename = file.name || "upload.media";
     const sampleMeta = parseSampleName(filename);
     const buffer = await file.arrayBuffer();
     const mono = await decodeMediaBufferToMono(buffer, filename, MAX_ANALYSIS_SECONDS);
@@ -67,8 +71,16 @@ export async function POST(request) {
       media: buildMediaMeta(mono, "server-ffmpeg"),
     });
   } catch (error) {
-    return NextResponse.json({ error: error.message || "媒体解析失败" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "音频解析失败" }, { status: 500 });
   }
+}
+
+function isSupportedAudioFile(file, filename) {
+  const type = file.type || "";
+  if (type.startsWith("video/") || /\.(mp4|mov|m4v|avi|webm|mkv|3gp)$/i.test(filename)) {
+    return false;
+  }
+  return type.startsWith("audio/") || /\.(flac|wav|mp3|m4a|aac|ogg|opus)$/i.test(filename);
 }
 
 async function getServerReferenceProfiles() {
