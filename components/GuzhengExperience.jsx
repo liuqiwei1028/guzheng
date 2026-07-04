@@ -96,9 +96,8 @@ export default function GuzhengExperience({ isMiniProgramShell = false }) {
     }
 
     const params = new URLSearchParams(window.location.search);
-    const userAgent = navigator.userAgent || "";
-    const inMiniProgram = params.get("mp") === "1" || params.get("client") === "miniprogram" || /miniProgram/i.test(userAgent);
-    if (inMiniProgram) {
+    const hasMiniProgramFlag = params.get("mp") === "1" || params.get("client") === "miniprogram";
+    if (hasMiniProgramFlag) {
       introFinishedRef.current = true;
       setIsMiniProgramView(true);
       setIntroVisible(false);
