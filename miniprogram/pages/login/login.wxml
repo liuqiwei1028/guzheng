@@ -2,7 +2,7 @@
   <view class="hero">
     <view class="eyebrow">GUZHENG TIMBRE AI</view>
     <view class="title">古筝 AI 音色鉴赏</view>
-    <view class="desc">请先使用微信或手机号登录，登录后即可进入音色分析、声档对比和 AI 报告。</view>
+    <view class="desc">请先使用微信或本机手机号一键登录，登录后即可进入音色分析、声档对比和 AI 报告。</view>
   </view>
 
   <view class="panel">
@@ -16,9 +16,9 @@
       loading="{{loadingPhone}}"
       disabled="{{loadingWechat || loadingPhone}}"
     >
-      手机号登录
+      本机手机号一键登录
     </button>
-    <view class="tip">手机号登录需小程序主体已认证并开通手机号快速验证能力。</view>
+    <view class="tip">无需输入短信验证码，将通过微信授权获取本机手机号；该能力需小程序主体已认证并开通手机号快速验证。</view>
   </view>
 
   <view wx:if="{{message}}" class="message">{{message}}</view>
