@@ -63,6 +63,8 @@ export default function GuzhengExperience() {
   const [spectrum, setSpectrum] = useState(null);
   const [referenceProfiles, setReferenceProfiles] = useState([]);
   const [reportImageUrl, setReportImageUrl] = useState("");
+  const [exportPreviewUrl, setExportPreviewUrl] = useState("");
+  const [exportHint, setExportHint] = useState("");
 
   const audioContextRef = useRef(null);
   const musicRef = useRef(null);
@@ -71,6 +73,7 @@ export default function GuzhengExperience() {
   const reportSectionRef = useRef(null);
   const reportCardRef = useRef(null);
   const aiReportRef = useRef(null);
+  const exportPreviewRef = useRef(null);
   const introFinishedRef = useRef(false);
   const introExitTimerRef = useRef(null);
 
@@ -182,6 +185,8 @@ export default function GuzhengExperience() {
       setAiReport("AI 正在等待古筝音色预检结果。");
       setAiSource("");
       setReportImageUrl("");
+      setExportPreviewUrl("");
+      setExportHint("");
       setAiReportReady(false);
 
       const context = await ensureAudioContext({ resume: true });
@@ -321,24 +326,55 @@ export default function GuzhengExperience() {
     }
   }
 
-  async function refreshReportImage(download = false) {
+  async function refreshReportImage(download = false, options = {}) {
     if (!reportCardRef.current || report.score === "--") return "";
-    const { toPng } = await import("html-to-image");
-    const dataUrl = await toPng(reportCardRef.current, {
-      cacheBust: true,
-      pixelRatio: 2,
-      backgroundColor: "#f6edda",
-      filter: (node) => !node?.dataset?.exportHidden,
-    });
+    const preferCanvas = options.preferCanvas || isMobileExportEnvironment();
+    let dataUrl = "";
+
+    if (preferCanvas) {
+      dataUrl = await createCanvasReportImage(report);
+    } else {
+      try {
+        const { toPng } = await import("html-to-image");
+        dataUrl = await toPng(reportCardRef.current, {
+          cacheBust: true,
+          pixelRatio: 2,
+          backgroundColor: "#f6edda",
+          filter: (node) => !node?.dataset?.exportHidden,
+        });
+      } catch (error) {
+        console.warn("DOM 导出失败，已切换 Canvas 报告图。", error);
+        dataUrl = await createCanvasReportImage(report);
+      }
+    }
+
     setReportImageUrl(dataUrl);
+    if (options.preview) setExportPreviewUrl(dataUrl);
     if (download) downloadDataUrl(dataUrl, `古筝音色分析报告-${Date.now()}.png`);
     return dataUrl;
   }
 
   async function exportReportImage() {
     setIsExporting(true);
+    setExportHint("");
     try {
-      await refreshReportImage(true);
+      const dataUrl = await refreshReportImage(false, {
+        preferCanvas: isMobileExportEnvironment(),
+        preview: true,
+      });
+      if (!dataUrl) return;
+
+      if (supportsDirectDownload()) {
+        downloadDataUrl(dataUrl, `古筝音色分析报告-${Date.now()}.png`);
+        setExportHint("报告图片已开始下载。");
+      } else {
+        setExportHint("报告图片已生成，请长按下方图片保存到相册。");
+        await nextFrame();
+        exportPreviewRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    } catch (error) {
+      console.error(error);
+      setExportHint("导出失败，请稍后重试或更换浏览器。");
     } finally {
       setIsExporting(false);
     }
@@ -543,6 +579,9 @@ export default function GuzhengExperience() {
             onExport={exportReportImage}
             isExporting={isExporting}
             canExport={canExport}
+            exportPreviewRef={exportPreviewRef}
+            exportPreviewUrl={exportPreviewUrl}
+            exportHint={exportHint}
           />
 
           <aside className="glass-panel rounded-lg p-5 md:p-6">
@@ -729,7 +768,7 @@ export default function GuzhengExperience() {
   );
 }
 
-function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canExport }) {
+function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canExport, exportPreviewRef, exportPreviewUrl, exportHint }) {
   return (
     <section ref={refTarget} className="glass-panel rounded-lg p-5 md:p-7">
       <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
@@ -835,8 +874,21 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
           className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#caa96e]/60 bg-white/60 px-5 text-sm font-medium text-[#5d4a24] shadow-soft transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
         >
           <ImageDown className="h-4 w-4" />
-          导出报告图片
+          {isExporting ? "正在生成图片" : "导出报告图片"}
         </button>
+      </div>
+
+      <div data-export-hidden="true" ref={exportPreviewRef} className="mt-4">
+        {exportHint ? (
+          <div className="rounded-lg border border-[#d9e2ca] bg-white/48 px-4 py-3 text-sm leading-6 text-[#5c6b51]">
+            {exportHint}
+          </div>
+        ) : null}
+        {exportPreviewUrl ? (
+          <div className="mt-3 overflow-hidden rounded-lg border border-white/70 bg-white/58 p-2">
+            <img src={exportPreviewUrl} alt="可保存的音色分析报告图片" className="block w-full rounded-md" />
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -1414,11 +1466,356 @@ function sanitizeAiText(text) {
     .trim();
 }
 
+async function createCanvasReportImage(report) {
+  if (document.fonts?.ready) {
+    await Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 350))]);
+  }
+
+  const width = 1200;
+  const draftHeight = 2300;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = draftHeight;
+  const ctx = canvas.getContext("2d");
+
+  const palette = {
+    paper: "#f6edda",
+    panel: "rgba(255, 255, 255, 0.42)",
+    panelStrong: "rgba(255, 255, 255, 0.58)",
+    ink: "#25321f",
+    body: "#526449",
+    gold: "#a17a34",
+    softGold: "#d2b36e",
+    green: "#6f8c72",
+    line: "rgba(255,255,255,0.72)",
+  };
+
+  ctx.fillStyle = palette.paper;
+  ctx.fillRect(0, 0, width, draftHeight);
+  const glow = ctx.createRadialGradient(180, 90, 20, 180, 90, 760);
+  glow.addColorStop(0, "rgba(255,255,255,.62)");
+  glow.addColorStop(0.48, "rgba(246,237,218,.3)");
+  glow.addColorStop(1, "rgba(237,243,223,.5)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, width, draftHeight);
+
+  let y = 76;
+  drawText(ctx, "AI TIMBRE REPORT", 60, y, {
+    font: serifFont(26, 500),
+    fillStyle: palette.gold,
+  });
+  y += 76;
+  drawText(ctx, "音色分析报告", 60, y, {
+    font: serifFont(72, 700),
+    fillStyle: palette.ink,
+  });
+
+  drawGauge(ctx, 1030, 145, 86, Number(report.score) || 0, palette);
+
+  y += 96;
+  y = drawTraits(ctx, report.traits || [], 60, y, 780, palette);
+  y += 34;
+
+  y = drawPanel(ctx, 60, y, 1080, 150, palette, () => {
+    return drawWrappedText(ctx, report.summary || "等待音频分析。", 94, y + 48, 1010, {
+      font: serifFont(30, 500),
+      fillStyle: "#35402d",
+      lineHeight: 48,
+      maxLines: 2,
+    });
+  });
+  y += 36;
+
+  const scoreItems = [
+    ["音区均衡", report.dimensionScores?.balance],
+    ["音色纯净", report.dimensionScores?.purity],
+    ["共鸣表现", report.dimensionScores?.resonance],
+    ["音色控制", report.dimensionScores?.control],
+  ];
+  y = drawScoreGrid(ctx, scoreItems, 60, y, 1080, palette);
+  y += 34;
+
+  const metricItems = [
+    ["古筝置信度", `${report.guzhengConfidence}/100`, "预检结果"],
+    ["动态范围", report.dynamicValue, report.dynamicText],
+    ["共鸣时间", report.resonanceValue, report.resonanceText],
+    ["木材推测", report.woodValue, report.woodText],
+    ["声音年龄", report.ageValue, report.ageText],
+  ];
+  y = drawMetricGrid(ctx, metricItems, 60, y, 1080, palette);
+  y += 34;
+
+  const leftHeight = estimateTextBoxHeight(report.weaknesses?.join("；") || "暂无明显短板。", 470, 28, 40, 128);
+  const rightHeight = estimateTextBoxHeight(report.styleFit || "等待曲风适配。", 470, 28, 40, 168);
+  const boxHeight = Math.max(210, leftHeight, rightHeight);
+  drawInfoBox(ctx, "不足提示", report.weaknesses?.join("；") || "暂无明显短板。", 60, y, 520, boxHeight, palette);
+  drawInfoBox(ctx, "曲风适配", report.styleFit || "等待曲风适配。", 620, y, 520, boxHeight, palette);
+  y += boxHeight + 38;
+
+  if (report.spectrumDetail) {
+    const spectrumHeight = estimateTextBoxHeight(report.spectrumDetail, 980, 26, 42, 132);
+    drawInfoBox(ctx, "频谱分析", report.spectrumDetail, 60, y, 1080, Math.max(180, spectrumHeight), palette);
+    y += Math.max(180, spectrumHeight) + 36;
+  }
+
+  drawText(ctx, "评分依据：音区均衡、音色纯净、共鸣表现与音色控制；参考声档仅辅助定位声学轮廓。", 60, y, {
+    font: serifFont(23, 400),
+    fillStyle: "#6b775f",
+  });
+  y += 54;
+
+  drawText(ctx, `生成时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`, 60, y, {
+    font: serifFont(22, 400),
+    fillStyle: "#8a977c",
+  });
+  y += 70;
+
+  const finalHeight = Math.min(Math.max(y, 1420), draftHeight);
+  const output = document.createElement("canvas");
+  output.width = width;
+  output.height = finalHeight;
+  const outCtx = output.getContext("2d");
+  outCtx.drawImage(canvas, 0, 0, width, finalHeight, 0, 0, width, finalHeight);
+  return output.toDataURL("image/png");
+}
+
+function drawGauge(ctx, cx, cy, radius, score, palette) {
+  const value = clampClient(score, 0, 100);
+  ctx.save();
+  ctx.lineWidth = 24;
+  ctx.strokeStyle = "rgba(106,125,85,.16)";
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = palette.softGold;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (value / 100));
+  ctx.stroke();
+  ctx.fillStyle = palette.paper;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius - 34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.textAlign = "center";
+  drawText(ctx, String(score || "--"), cx, cy - 4, {
+    font: serifFont(46, 700),
+    fillStyle: palette.ink,
+    align: "center",
+  });
+  drawText(ctx, "/100", cx, cy + 44, {
+    font: serifFont(20, 400),
+    fillStyle: "#718064",
+    align: "center",
+  });
+  ctx.restore();
+}
+
+function drawTraits(ctx, traits, x, y, maxWidth, palette) {
+  let currentX = x;
+  let currentY = y;
+  const height = 54;
+  traits.slice(0, 8).forEach((trait) => {
+    const text = String(trait);
+    ctx.font = serifFont(24, 500);
+    const chipWidth = Math.max(126, ctx.measureText(text).width + 48);
+    if (currentX + chipWidth > x + maxWidth) {
+      currentX = x;
+      currentY += height + 14;
+    }
+    roundedRect(ctx, currentX, currentY, chipWidth, height, 27);
+    ctx.fillStyle = "rgba(255,255,255,.45)";
+    ctx.fill();
+    ctx.strokeStyle = "#cad6bc";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    drawText(ctx, text, currentX + chipWidth / 2, currentY + 35, {
+      font: serifFont(23, 500),
+      fillStyle: palette.body,
+      align: "center",
+    });
+    currentX += chipWidth + 16;
+  });
+  return currentY + height;
+}
+
+function drawPanel(ctx, x, y, width, height, palette, drawContent) {
+  roundedRect(ctx, x, y, width, height, 14);
+  ctx.fillStyle = palette.panel;
+  ctx.fill();
+  ctx.strokeStyle = palette.line;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  drawContent?.();
+  return y + height;
+}
+
+function drawScoreGrid(ctx, items, x, y, width, palette) {
+  const gap = 20;
+  const cardWidth = (width - gap * 3) / 4;
+  const cardHeight = 132;
+  items.forEach(([title, value], index) => {
+    const cardX = x + index * (cardWidth + gap);
+    drawPanel(ctx, cardX, y, cardWidth, cardHeight, palette);
+    drawText(ctx, title, cardX + 26, y + 46, {
+      font: serifFont(22, 500),
+      fillStyle: "#66755b",
+    });
+    drawText(ctx, String(value ?? "--"), cardX + cardWidth - 26, y + 54, {
+      font: serifFont(34, 700),
+      fillStyle: palette.gold,
+      align: "right",
+    });
+    const numeric = Number(value) || 0;
+    const barX = cardX + 26;
+    const barY = y + 92;
+    const barWidth = cardWidth - 52;
+    roundedRect(ctx, barX, barY, barWidth, 12, 6);
+    ctx.fillStyle = "#dfe8d0";
+    ctx.fill();
+    roundedRect(ctx, barX, barY, barWidth * clampClient(numeric / 100, 0, 1), 12, 6);
+    const gradient = ctx.createLinearGradient(barX, 0, barX + barWidth, 0);
+    gradient.addColorStop(0, "#7d9b85");
+    gradient.addColorStop(1, palette.softGold);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+  });
+  return y + cardHeight;
+}
+
+function drawMetricGrid(ctx, items, x, y, width, palette) {
+  const gap = 18;
+  const cardWidth = (width - gap * 4) / 5;
+  const cardHeight = 166;
+  items.forEach(([title, value, text], index) => {
+    const cardX = x + index * (cardWidth + gap);
+    drawPanel(ctx, cardX, y, cardWidth, cardHeight, palette);
+    drawText(ctx, title, cardX + 22, y + 42, {
+      font: serifFont(21, 500),
+      fillStyle: "#66755b",
+    });
+    drawWrappedText(ctx, String(value ?? "--"), cardX + 22, y + 82, cardWidth - 44, {
+      font: serifFont(28, 700),
+      fillStyle: palette.gold,
+      lineHeight: 32,
+      maxLines: 2,
+    });
+    drawWrappedText(ctx, String(text || ""), cardX + 22, y + 132, cardWidth - 44, {
+      font: serifFont(19, 400),
+      fillStyle: palette.body,
+      lineHeight: 24,
+      maxLines: 2,
+    });
+  });
+  return y + cardHeight;
+}
+
+function drawInfoBox(ctx, title, body, x, y, width, height, palette) {
+  drawPanel(ctx, x, y, width, height, palette);
+  drawText(ctx, title, x + 32, y + 56, {
+    font: serifFont(29, 700),
+    fillStyle: palette.ink,
+  });
+  drawWrappedText(ctx, body, x + 32, y + 106, width - 64, {
+    font: serifFont(24, 400),
+    fillStyle: palette.body,
+    lineHeight: 39,
+    maxLines: Math.max(2, Math.floor((height - 118) / 39)),
+  });
+}
+
+function drawText(ctx, text, x, y, options = {}) {
+  ctx.save();
+  ctx.font = options.font || serifFont(24, 400);
+  ctx.fillStyle = options.fillStyle || "#25321f";
+  ctx.textAlign = options.align || "left";
+  ctx.textBaseline = options.baseline || "alphabetic";
+  ctx.fillText(String(text), x, y);
+  ctx.restore();
+}
+
+function drawWrappedText(ctx, text, x, y, maxWidth, options = {}) {
+  ctx.save();
+  ctx.font = options.font || serifFont(24, 400);
+  ctx.fillStyle = options.fillStyle || "#25321f";
+  ctx.textAlign = options.align || "left";
+  ctx.textBaseline = "alphabetic";
+  const lineHeight = options.lineHeight || 36;
+  const lines = wrapCanvasText(ctx, String(text || ""), maxWidth, options.maxLines || 10);
+  lines.forEach((line, index) => {
+    ctx.fillText(line, x, y + index * lineHeight);
+  });
+  ctx.restore();
+  return y + lines.length * lineHeight;
+}
+
+function wrapCanvasText(ctx, text, maxWidth, maxLines) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return [""];
+  const tokens = Array.from(normalized);
+  const lines = [];
+  let line = "";
+  for (const token of tokens) {
+    const next = line + token;
+    if (ctx.measureText(next).width <= maxWidth || !line) {
+      line = next;
+    } else {
+      lines.push(line);
+      line = token;
+      if (lines.length >= maxLines) break;
+    }
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  if (lines.length === maxLines && tokens.join("").length > lines.join("").length) {
+    lines[lines.length - 1] = `${lines[lines.length - 1].slice(0, -1)}…`;
+  }
+  return lines;
+}
+
+function estimateTextBoxHeight(text, width, fontSize, lineHeight, base) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.font = serifFont(fontSize, 400);
+  const lines = wrapCanvasText(ctx, text, width, 8);
+  return base + lines.length * lineHeight;
+}
+
+function roundedRect(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function serifFont(size, weight = 400) {
+  return `${weight} ${size}px "Noto Serif SC", "Songti SC", "Microsoft YaHei", serif`;
+}
+
+function isMobileExportEnvironment() {
+  if (typeof navigator === "undefined") return false;
+  return /MicroMessenger|miniProgram|Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+}
+
+function supportsDirectDownload() {
+  if (typeof document === "undefined") return false;
+  if (isMobileExportEnvironment()) return false;
+  const link = document.createElement("a");
+  return "download" in link;
+}
+
 function downloadDataUrl(dataUrl, filename) {
   const link = document.createElement("a");
   link.href = dataUrl;
   link.download = filename;
+  document.body.appendChild(link);
   link.click();
+  link.remove();
 }
 
 function nextFrame() {
