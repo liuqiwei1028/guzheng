@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpenCheck, ChevronRight, Gem, ImageDown, Mail, Music2, Phone, ShieldCheck, Sparkles, UploadCloud, Volume2 } from "lucide-react";
 import {
   MAX_ANALYSIS_SECONDS,
@@ -43,7 +43,7 @@ const initialReport = {
   deepseekContext: null,
 };
 
-export default function GuzhengExperience({ isMiniProgramShell = false }) {
+export default function GuzhengExperience() {
   const [report, setReport] = useState(initialReport);
   const [status, setStatus] = useState("等待第一段声音进入鉴赏台");
   const [currentFile, setCurrentFile] = useState("尚未载入音频");
@@ -53,9 +53,6 @@ export default function GuzhengExperience({ isMiniProgramShell = false }) {
   const [aiSource, setAiSource] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isMiniProgramView, setIsMiniProgramView] = useState(isMiniProgramShell);
-  const [introVisible, setIntroVisible] = useState(!isMiniProgramShell);
-  const [introLeaving, setIntroLeaving] = useState(false);
   const [activeSection, setActiveSection] = useState("");
   const [aiReportReady, setAiReportReady] = useState(false);
   const [isMusicPlaying, setIsMusicPlaying] = useState(true);
@@ -75,35 +72,6 @@ export default function GuzhengExperience({ isMiniProgramShell = false }) {
   const reportCardRef = useRef(null);
   const aiReportRef = useRef(null);
   const exportPreviewRef = useRef(null);
-  const introFinishedRef = useRef(false);
-  const introExitTimerRef = useRef(null);
-
-  const finishIntro = useCallback(() => {
-    if (introFinishedRef.current) return;
-    introFinishedRef.current = true;
-    setIntroLeaving(true);
-    introExitTimerRef.current = window.setTimeout(() => {
-      setIntroVisible(false);
-    }, 1100);
-  }, []);
-
-  useEffect(() => {
-    if (isMiniProgramShell) {
-      introFinishedRef.current = true;
-      setIsMiniProgramView(true);
-      setIntroVisible(false);
-      return;
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    const hasMiniProgramFlag = params.get("mp") === "1" || params.get("client") === "miniprogram";
-    if (hasMiniProgramFlag) {
-      introFinishedRef.current = true;
-      setIsMiniProgramView(true);
-      setIntroVisible(false);
-    }
-  }, [isMiniProgramShell]);
-
   useEffect(() => {
     const audio = musicRef.current;
     if (!audio) return;
@@ -144,12 +112,6 @@ export default function GuzhengExperience({ isMiniProgramShell = false }) {
     prepareReferences();
     return () => {
       cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (introExitTimerRef.current) window.clearTimeout(introExitTimerRef.current);
     };
   }, []);
 
@@ -428,11 +390,11 @@ export default function GuzhengExperience({ isMiniProgramShell = false }) {
 
   async function refreshReportImage(download = false, options = {}) {
     if (!reportCardRef.current || report.score === "--") return "";
-    const preferCanvas = options.preferCanvas || isMobileExportEnvironment();
+    const preferCanvas = options.preferCanvas ?? true;
     let dataUrl = "";
 
     if (preferCanvas) {
-      dataUrl = await createCanvasReportImage(report);
+      dataUrl = await createCanvasReportImage(report, spectrum);
     } else {
       try {
         const { toPng } = await import("html-to-image");
@@ -444,7 +406,7 @@ export default function GuzhengExperience({ isMiniProgramShell = false }) {
         });
       } catch (error) {
         console.warn("DOM 导出失败，已切换 Canvas 报告图。", error);
-        dataUrl = await createCanvasReportImage(report);
+        dataUrl = await createCanvasReportImage(report, spectrum);
       }
     }
 
@@ -458,15 +420,17 @@ export default function GuzhengExperience({ isMiniProgramShell = false }) {
     setIsExporting(true);
     setExportHint("");
     try {
+      const needsPreview = !supportsDirectDownload();
       const dataUrl = await refreshReportImage(false, {
-        preferCanvas: isMobileExportEnvironment(),
-        preview: true,
+        preferCanvas: true,
+        preview: needsPreview,
       });
       if (!dataUrl) return;
 
       if (supportsDirectDownload()) {
         downloadDataUrl(dataUrl, `古筝音色分析报告-${Date.now()}.png`);
         setExportHint("报告图片已开始下载。");
+        setExportPreviewUrl("");
       } else {
         setExportHint("报告图片已生成，请长按下方图片保存到相册。");
         await nextFrame();
@@ -483,8 +447,6 @@ export default function GuzhengExperience({ isMiniProgramShell = false }) {
   return (
     <main className="min-h-screen overflow-hidden bg-[#f5efd9] pb-24 text-ink md:pb-0">
       <audio ref={musicRef} src="/bg-music.flac" preload="metadata" />
-      {introVisible && !isMiniProgramView ? <IntroOverlay leaving={introLeaving} onDone={finishIntro} /> : null}
-
       <header
         className="fixed left-0 right-0 top-0 z-40 flex items-center justify-between px-4 py-4 transition duration-500 md:px-10 md:py-5"
       >
@@ -532,19 +494,6 @@ export default function GuzhengExperience({ isMiniProgramShell = false }) {
 
       <section className="relative min-h-[100svh] overflow-hidden">
         <div className="absolute inset-0 bg-[url('/hero-bg.png')] bg-cover bg-[38%_center] md:bg-center" />
-        {!isMiniProgramView ? (
-          <video
-            className="absolute inset-0 h-full w-full object-cover"
-            src="/bg.mp4"
-            poster="/hero-bg.png"
-            muted
-            playsInline
-            autoPlay
-            loop
-            preload="auto"
-            aria-hidden="true"
-          />
-        ) : null}
         <div className="hero-breathe absolute inset-0 bg-gradient-to-b from-white/18 via-white/0 to-[#f5efd9]" />
         <div className="absolute inset-y-0 right-0 w-[68vw] bg-gradient-to-l from-[#142014]/72 via-[#213018]/34 to-transparent" />
         <div className="hero-mist absolute inset-x-[-12%] top-[13%] h-40 bg-gradient-to-r from-transparent via-white/34 to-transparent blur-2xl" />
@@ -993,54 +942,6 @@ function ReportCard({ refTarget, report, scoreStyle, onExport, isExporting, canE
         ) : null}
       </div>
     </section>
-  );
-}
-
-function IntroOverlay({ leaving, onDone }) {
-  const [videoReady, setVideoReady] = useState(false);
-  const videoOpacity = leaving || !videoReady ? "opacity-0" : "opacity-100";
-  const videoScale = leaving ? "scale-[1.018]" : "scale-100";
-
-  useEffect(() => {
-    if (!videoReady) {
-      const fallback = window.setTimeout(onDone, 5000);
-      return () => window.clearTimeout(fallback);
-    }
-    const release = window.setTimeout(onDone, 3400);
-    return () => window.clearTimeout(release);
-  }, [onDone, videoReady]);
-
-  useEffect(() => {
-    const fallback = window.setTimeout(onDone, 9000);
-    return () => window.clearTimeout(fallback);
-  }, [onDone]);
-
-  return (
-    <div
-      className={`intro-overlay fixed inset-0 z-[80] overflow-hidden bg-[#f5efd9] transition duration-1000 ease-out ${
-        leaving ? "pointer-events-none opacity-0" : "opacity-100"
-      }`}
-      aria-hidden="true"
-    >
-      <div className="absolute inset-0 bg-[url('/hero-bg.png')] bg-cover bg-[38%_center] md:bg-center" />
-      <video
-        className={`absolute inset-0 h-full w-full object-cover transition duration-700 ${videoOpacity} ${videoScale}`}
-        src="/bg.mp4"
-        muted
-        playsInline
-        autoPlay
-        preload="auto"
-        onCanPlay={() => setVideoReady(true)}
-        onLoadedData={() => setVideoReady(true)}
-        onTimeUpdate={(event) => {
-          if (event.currentTarget.currentTime >= 3) onDone();
-        }}
-        onEnded={onDone}
-        onError={onDone}
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-[#f5efd9]/38" />
-      <div className={`intro-veil absolute inset-0 bg-[#f5efd9] ${videoReady ? "opacity-0" : "opacity-45"}`} />
-    </div>
   );
 }
 
@@ -1568,7 +1469,7 @@ function sanitizeAiText(text) {
     .trim();
 }
 
-async function createCanvasReportImage(report) {
+async function createCanvasReportImage(report, spectrum) {
   if (document.fonts?.ready) {
     await Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 350))]);
   }
@@ -1655,9 +1556,9 @@ async function createCanvasReportImage(report) {
   y += boxHeight + 38;
 
   if (report.spectrumDetail) {
-    const spectrumHeight = estimateTextBoxHeight(report.spectrumDetail, 980, 26, 42, 132);
-    drawInfoBox(ctx, "频谱分析", report.spectrumDetail, 60, y, 1080, Math.max(180, spectrumHeight), palette);
-    y += Math.max(180, spectrumHeight) + 36;
+    const spectrumHeight = estimateTextBoxHeight(report.spectrumDetail, 980, 26, 42, 172);
+    drawSpectrumInfoBox(ctx, report, spectrum, 60, y, 1080, Math.max(330, spectrumHeight + 148), palette);
+    y += Math.max(330, spectrumHeight + 148) + 36;
   }
 
   drawText(ctx, "评分依据：音区均衡、音色纯净、共鸣表现与音色控制；参考声档仅辅助定位声学轮廓。", 60, y, {
@@ -1822,6 +1723,150 @@ function drawInfoBox(ctx, title, body, x, y, width, height, palette) {
     lineHeight: 39,
     maxLines: Math.max(2, Math.floor((height - 118) / 39)),
   });
+}
+
+function drawSpectrumInfoBox(ctx, report, spectrum, x, y, width, height, palette) {
+  drawPanel(ctx, x, y, width, height, palette);
+  drawText(ctx, "频谱分析", x + 32, y + 56, {
+    font: serifFont(29, 700),
+    fillStyle: palette.ink,
+  });
+  drawText(ctx, report.spectrumLabel || "未载入", x + width - 32, y + 56, {
+    font: serifFont(24, 600),
+    fillStyle: palette.gold,
+    align: "right",
+  });
+
+  const chartX = x + 32;
+  const chartY = y + 86;
+  const chartWidth = width - 64;
+  const chartHeight = 150;
+  const values = normalizeSpectrumValues(spectrum?.values);
+  const gradient = ctx.createLinearGradient(chartX, chartY, chartX, chartY + chartHeight);
+  gradient.addColorStop(0, "rgba(210,179,110,.72)");
+  gradient.addColorStop(1, "rgba(111,140,114,.08)");
+
+  roundedRect(ctx, chartX, chartY, chartWidth, chartHeight, 14);
+  ctx.fillStyle = "rgba(255,255,255,.32)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.72)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.save();
+  ctx.beginPath();
+  roundedRect(ctx, chartX, chartY, chartWidth, chartHeight, 14);
+  ctx.clip();
+  ctx.strokeStyle = "rgba(111,140,114,.18)";
+  ctx.lineWidth = 1;
+  for (let index = 1; index < 4; index += 1) {
+    const gy = chartY + (chartHeight / 4) * index;
+    ctx.beginPath();
+    ctx.moveTo(chartX, gy);
+    ctx.lineTo(chartX + chartWidth, gy);
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  values.forEach((value, index) => {
+    const px = chartX + (chartWidth * index) / Math.max(1, values.length - 1);
+    const py = chartY + chartHeight - value * (chartHeight - 24) - 12;
+    if (index === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  });
+  ctx.lineTo(chartX + chartWidth, chartY + chartHeight);
+  ctx.lineTo(chartX, chartY + chartHeight);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  ctx.beginPath();
+  values.forEach((value, index) => {
+    const px = chartX + (chartWidth * index) / Math.max(1, values.length - 1);
+    const py = chartY + chartHeight - value * (chartHeight - 24) - 12;
+    if (index === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  });
+  ctx.strokeStyle = palette.softGold;
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.restore();
+
+  drawText(ctx, "能量", chartX + 12, chartY + 28, {
+    font: serifFont(18, 400),
+    fillStyle: "#70805f",
+  });
+  drawText(ctx, "80Hz", chartX, chartY + chartHeight + 28, {
+    font: serifFont(18, 400),
+    fillStyle: "#70805f",
+  });
+  drawText(ctx, "1k", chartX + chartWidth * 0.54, chartY + chartHeight + 28, {
+    font: serifFont(18, 400),
+    fillStyle: "#70805f",
+    align: "center",
+  });
+  drawText(ctx, "8kHz", chartX + chartWidth, chartY + chartHeight + 28, {
+    font: serifFont(18, 400),
+    fillStyle: "#70805f",
+    align: "right",
+  });
+
+  const low = spectrum?.lowRatio ?? report.deepseekContext?.lowRatio;
+  const mid = spectrum?.midRatio ?? report.deepseekContext?.midRatio;
+  const high = spectrum?.highRatio ?? report.deepseekContext?.highRatio;
+  const centroid = Math.round(spectrum?.centroid ?? report.deepseekContext?.spectralCentroidHz ?? 0);
+  const chips = [
+    `低频 ${formatRatio(low)}`,
+    `中频 ${formatRatio(mid)}`,
+    `高频 ${formatRatio(high)}`,
+    centroid ? `重心 ${centroid} Hz` : report.spectrumLabel || "频谱重心待分析",
+  ];
+  let chipX = chartX;
+  const chipY = chartY + chartHeight + 52;
+  chips.forEach((chip) => {
+    ctx.font = serifFont(20, 500);
+    const chipWidth = Math.max(128, ctx.measureText(chip).width + 34);
+    roundedRect(ctx, chipX, chipY, chipWidth, 40, 20);
+    ctx.fillStyle = "rgba(255,247,230,.74)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(202,169,110,.42)";
+    ctx.stroke();
+    drawText(ctx, chip, chipX + chipWidth / 2, chipY + 27, {
+      font: serifFont(19, 500),
+      fillStyle: "#6b775f",
+      align: "center",
+    });
+    chipX += chipWidth + 12;
+  });
+
+  const summaryY = chipY + 68;
+  drawWrappedText(ctx, report.spectrumSummary || "等待频谱分析", x + 32, summaryY, width - 64, {
+    font: serifFont(24, 600),
+    fillStyle: palette.gold,
+    lineHeight: 36,
+    maxLines: 1,
+  });
+  drawWrappedText(ctx, report.spectrumDetail || "完成分析后，这里会显示频段比例、频谱重心和分段变化。", x + 32, summaryY + 48, width - 64, {
+    font: serifFont(24, 400),
+    fillStyle: palette.body,
+    lineHeight: 39,
+    maxLines: Math.max(2, Math.floor((height - 310) / 39)),
+  });
+}
+
+function normalizeSpectrumValues(values) {
+  const source =
+    Array.isArray(values) && values.length
+      ? values
+      : Array.from({ length: 80 }, (_, index) => 0.16 + Math.sin(index * 0.36) * 0.05 + Math.cos(index * 0.12) * 0.04);
+  const max = Math.max(...source.map((value) => Number(value) || 0), 0.001);
+  return source.map((value) => clampClient((Number(value) || 0) / max, 0.05, 1));
+}
+
+function formatRatio(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "--";
+  return `${Math.round(numeric * 100)}%`;
 }
 
 function drawText(ctx, text, x, y, options = {}) {

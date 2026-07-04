@@ -116,15 +116,6 @@ canvas {
     0 0 30px rgba(20, 32, 20, 0.62);
 }
 
-.intro-overlay video {
-  transform-origin: center;
-  will-change: opacity, transform;
-}
-
-.intro-veil {
-  transition: opacity 700ms ease;
-}
-
 .idle-wave {
   contain: paint;
   transform: translateZ(0);
