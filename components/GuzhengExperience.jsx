@@ -1475,7 +1475,7 @@ async function createCanvasReportImage(report, spectrum) {
   }
 
   const width = 1200;
-  const draftHeight = 2300;
+  const draftHeight = 2800;
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = draftHeight;
@@ -1556,16 +1556,19 @@ async function createCanvasReportImage(report, spectrum) {
   y += boxHeight + 38;
 
   if (report.spectrumDetail) {
-    const spectrumHeight = estimateTextBoxHeight(report.spectrumDetail, 980, 26, 42, 172);
-    drawSpectrumInfoBox(ctx, report, spectrum, 60, y, 1080, Math.max(330, spectrumHeight + 148), palette);
-    y += Math.max(330, spectrumHeight + 148) + 36;
+    const spectrumDetailLines = estimateCanvasLineCount(report.spectrumDetail, 1016, 24, 4);
+    const spectrumBoxHeight = Math.max(560, 470 + spectrumDetailLines * 39);
+    drawSpectrumInfoBox(ctx, report, spectrum, 60, y, 1080, spectrumBoxHeight, palette);
+    y += spectrumBoxHeight + 44;
   }
 
-  drawText(ctx, "评分依据：音区均衡、音色纯净、共鸣表现与音色控制；参考声档仅辅助定位声学轮廓。", 60, y, {
+  y = drawWrappedText(ctx, "评分依据：音区均衡、音色纯净、共鸣表现与音色控制；参考声档仅辅助定位声学轮廓。", 60, y, 1080, {
     font: serifFont(23, 400),
     fillStyle: "#6b775f",
+    lineHeight: 36,
+    maxLines: 2,
   });
-  y += 54;
+  y += 24;
 
   drawText(ctx, `生成时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`, 60, y, {
     font: serifFont(22, 400),
@@ -1846,11 +1849,12 @@ function drawSpectrumInfoBox(ctx, report, spectrum, x, y, width, height, palette
     lineHeight: 36,
     maxLines: 1,
   });
+  const detailMaxLines = Math.max(2, Math.floor((height - 444) / 39));
   drawWrappedText(ctx, report.spectrumDetail || "完成分析后，这里会显示频段比例、频谱重心和分段变化。", x + 32, summaryY + 48, width - 64, {
     font: serifFont(24, 400),
     fillStyle: palette.body,
     lineHeight: 39,
-    maxLines: Math.max(2, Math.floor((height - 310) / 39)),
+    maxLines: detailMaxLines,
   });
 }
 
@@ -1923,6 +1927,13 @@ function estimateTextBoxHeight(text, width, fontSize, lineHeight, base) {
   ctx.font = serifFont(fontSize, 400);
   const lines = wrapCanvasText(ctx, text, width, 8);
   return base + lines.length * lineHeight;
+}
+
+function estimateCanvasLineCount(text, width, fontSize, maxLines) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.font = serifFont(fontSize, 400);
+  return wrapCanvasText(ctx, text, width, maxLines).length;
 }
 
 function roundedRect(ctx, x, y, width, height, radius) {
