@@ -55,6 +55,7 @@ export default function GuzhengExperience() {
   const [isExporting, setIsExporting] = useState(false);
   const [activeSection, setActiveSection] = useState("");
   const [aiReportReady, setAiReportReady] = useState(false);
+  const [isMiniProgramView, setIsMiniProgramView] = useState(false);
   const [isMusicPlaying, setIsMusicPlaying] = useState(true);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [waveform, setWaveform] = useState(null);
@@ -72,6 +73,14 @@ export default function GuzhengExperience() {
   const reportCardRef = useRef(null);
   const aiReportRef = useRef(null);
   const exportPreviewRef = useRef(null);
+
+  const clientLabel = isMiniProgramView ? "小程序" : "浏览器";
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setIsMiniProgramView(params.get("mp") === "1" || params.get("client") === "miniprogram");
+  }, []);
+
   useEffect(() => {
     const audio = musicRef.current;
     if (!audio) return;
@@ -88,6 +97,32 @@ export default function GuzhengExperience() {
         setAutoplayBlocked(true);
       });
   }, []);
+
+  useEffect(() => {
+    if (!autoplayBlocked) return undefined;
+    const unlockMusic = () => {
+      const audio = musicRef.current;
+      if (!audio) return;
+      audio
+        .play()
+        .then(() => {
+          setIsMusicPlaying(true);
+          setAutoplayBlocked(false);
+        })
+        .catch(() => {
+          setIsMusicPlaying(false);
+          setAutoplayBlocked(true);
+        });
+    };
+    window.addEventListener("pointerdown", unlockMusic, { once: true, passive: true });
+    window.addEventListener("touchstart", unlockMusic, { once: true, passive: true });
+    window.addEventListener("click", unlockMusic, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlockMusic);
+      window.removeEventListener("touchstart", unlockMusic);
+      window.removeEventListener("click", unlockMusic);
+    };
+  }, [autoplayBlocked]);
 
   useEffect(() => {
     let cancelled = false;
@@ -214,7 +249,7 @@ export default function GuzhengExperience() {
       setTimeout(() => refreshReportImage(false), 180);
     } catch (error) {
       console.error(error);
-      setStatus("浏览器无法解码这段音频，请换用 WAV、MP3、M4A 或 FLAC 文件。");
+      setStatus(`${clientLabel}无法解码这段音频，请换用 WAV、MP3、M4A 或 FLAC 文件。`);
       setFileState("失败");
       if (sourceFile && isServerAudioFallbackCandidate(sourceFile)) {
         console.warn("本地解码失败，切换服务端音频解析。", error);
@@ -438,7 +473,7 @@ export default function GuzhengExperience() {
       }
     } catch (error) {
       console.error(error);
-      setExportHint("导出失败，请稍后重试或更换浏览器。");
+      setExportHint(`导出失败，请稍后重试或更换${clientLabel === "小程序" ? "小程序环境" : "浏览器"}。`);
     } finally {
       setIsExporting(false);
     }
@@ -526,7 +561,9 @@ export default function GuzhengExperience() {
               </a>
             </div>
             {autoplayBlocked ? (
-              <p className="hero-copy-glow mt-5 text-sm text-[#fff1c6]">浏览器已拦截自动播放，点击左上角音符即可开启背景音乐。</p>
+              <p className="hero-copy-glow mt-5 text-sm text-[#fff1c6]">
+                {clientLabel}已拦截自动播放，点击左上角音符或轻触页面即可开启背景音乐。
+              </p>
             ) : null}
           </div>
         </div>
@@ -751,7 +788,7 @@ export default function GuzhengExperience() {
           <FooterInfoCard icon={ShieldCheck} eyebrow="Privacy" title="隐私政策">
             <p>最后更新时间：2026 年 7 月 2 日。</p>
             <p>
-              本网页不会采集、保存或转存你的原始音频片段。基础音色分析在浏览器内完成；当你点击生成 AI 报告时，仅提交频谱、动态、共鸣、分段评分等结构化特征，不包含原始音频文件。
+              本网页不会采集、保存或转存你的原始音频片段。基础音色分析在当前页面内完成；当你点击生成 AI 报告时，仅提交频谱、动态、共鸣、分段评分等结构化特征，不包含原始音频文件。
             </p>
             <p>联系方式仅用于答复咨询、购筝沟通或售后协助，不会用于无关营销转交。</p>
           </FooterInfoCard>
