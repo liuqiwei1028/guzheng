@@ -564,7 +564,7 @@ export default function GuzhengExperience() {
               <input
                 ref={uploadInputRef}
                 type="file"
-                accept="audio/*,.flac,.wav,.mp3,.m4a,.aac,.ogg,.opus"
+                accept=".flac,.wav,.mp3,.m4a,.aac,.ogg,.opus"
                 className="hidden"
                 onChange={(event) => handleUserFile(event.target.files?.[0])}
               />
@@ -573,7 +573,7 @@ export default function GuzhengExperience() {
               </span>
               <span className="mt-4 block text-lg font-semibold text-[#2d3826] md:mt-5 md:text-xl">拖入或选择古筝音频</span>
               <span className="mt-2 block max-w-[280px] text-sm leading-6 text-[#65745a]">
-                仅支持音频文件；超过 60 秒时，系统只分析前 60 秒
+                请从文件中选择音频；超过 60 秒时，系统只分析前 60 秒
               </span>
             </button>
 
