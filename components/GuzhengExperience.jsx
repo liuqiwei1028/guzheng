@@ -178,8 +178,13 @@ export default function GuzhengExperience() {
     return audioContextRef.current;
   }
 
-  async function analyzeArrayBuffer(arrayBuffer, sourceName, sampleMeta) {
+  async function analyzeArrayBuffer(arrayBuffer, sourceName, sampleMeta, sourceFile = null) {
     try {
+      if (sourceFile && isVideoLikeFile(sourceFile)) {
+        await analyzeMediaOnServer(sourceFile);
+        return;
+      }
+
       setStatus("正在解码音频，并进行古筝音色预检...");
       setFileState("预检中");
       setAiReport("AI 正在等待古筝音色预检结果。");
@@ -230,6 +235,61 @@ export default function GuzhengExperience() {
     } catch (error) {
       console.error(error);
       setStatus("浏览器无法解码这段音频，请换用 WAV、MP3、M4A 或 FLAC 文件。");
+      setFileState("失败");
+      if (sourceFile && isServerMediaFallbackCandidate(sourceFile)) {
+        console.warn("本地解码失败，切换服务端媒体解析。", error);
+        await analyzeMediaOnServer(sourceFile);
+      }
+    }
+  }
+
+  async function analyzeMediaOnServer(file) {
+    setStatus("正在从视频/媒体文件中抽取音轨，并进行古筝音色预检...");
+    setFileState("抽取音轨");
+    setAiReport("AI 正在等待媒体音轨解析结果。");
+    setAiSource("");
+    setReportImageUrl("");
+    setExportPreviewUrl("");
+    setExportHint("");
+    setAiReportReady(false);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file, file.name || "upload.media");
+      const response = await fetch("/api/analyze-media", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || `媒体解析失败：HTTP ${response.status}`);
+      }
+
+      setWaveform(data.waveform || null);
+      setSpectrum(data.spectrum || null);
+      setReport(data.report);
+      const media = data.media || {};
+
+      if (data.report?.score === "--") {
+        setStatus(`未通过古筝音色预检，置信度 ${data.report.guzhengConfidence}/100。`);
+        setFileState("未评分");
+        setAiReport("媒体音轨未通过古筝声音预检，因此不会生成正式评分。建议上传古筝独奏、少混响、少环境噪声的视频或音频。");
+        setAiSource("AI 预检");
+      } else {
+        setStatus(
+          `分析完成，古筝置信度 ${data.report.guzhengConfidence}/100。已从媒体音轨取前 ${Math.round(media.analyzedDuration || MAX_ANALYSIS_SECONDS)} 秒分析${
+            media.wasTrimmed ? "，后续音轨已自动舍弃。" : "。"
+          }`,
+        );
+        setFileState("已完成");
+        setAiReport("基础音色分析已完成。点击“生成 AI 报告”后，将调用 AI 生成更完整的具体分析结论。");
+        setAiSource("等待生成");
+        setTimeout(() => refreshReportImage(false), 180);
+      }
+      scrollToReport();
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message || "媒体音轨解析失败，请换用 MP4、MOV、M4A、MP3、WAV 或 FLAC。");
       setFileState("失败");
     }
   }
@@ -285,7 +345,11 @@ export default function GuzhengExperience() {
       playerRef.current.src = URL.createObjectURL(file);
       playerRef.current.load();
     }
-    await analyzeArrayBuffer(await file.arrayBuffer(), file.name, parseSampleName(file.name));
+    if (isVideoLikeFile(file)) {
+      await analyzeMediaOnServer(file);
+      return;
+    }
+    await analyzeArrayBuffer(await file.arrayBuffer(), file.name, parseSampleName(file.name), file);
   }
 
   async function loadReferenceSample(sample) {
@@ -513,7 +577,7 @@ export default function GuzhengExperience() {
               <input
                 ref={uploadInputRef}
                 type="file"
-                accept="audio/*,.flac,.wav,.mp3,.m4a,.ogg"
+                accept="audio/*,video/*,.flac,.wav,.mp3,.m4a,.ogg,.mp4,.mov,.m4v,.avi,.webm"
                 className="hidden"
                 onChange={(event) => handleUserFile(event.target.files?.[0])}
               />
@@ -522,7 +586,7 @@ export default function GuzhengExperience() {
               </span>
               <span className="mt-4 block text-lg font-semibold text-[#2d3826] md:mt-5 md:text-xl">拖入或选择古筝音频</span>
               <span className="mt-2 block max-w-[280px] text-sm leading-6 text-[#65745a]">
-                建议 10 秒以上；超过 60 秒时，系统只分析前 60 秒
+                支持音频或含音轨的视频；超过 60 秒时，系统只分析前 60 秒
               </span>
             </button>
 
@@ -1807,6 +1871,22 @@ function supportsDirectDownload() {
   if (isMobileExportEnvironment()) return false;
   const link = document.createElement("a");
   return "download" in link;
+}
+
+function isVideoLikeFile(file) {
+  const type = file?.type || "";
+  const name = file?.name || "";
+  return type.startsWith("video/") || /\.(mp4|mov|m4v|avi|webm|mkv|3gp)$/i.test(name);
+}
+
+function isServerMediaFallbackCandidate(file) {
+  const type = file?.type || "";
+  const name = file?.name || "";
+  return (
+    isVideoLikeFile(file) ||
+    type.startsWith("audio/") ||
+    /\.(flac|wav|mp3|m4a|aac|ogg|opus|mp4|mov|m4v|avi|webm|mkv|3gp)$/i.test(name)
+  );
 }
 
 function downloadDataUrl(dataUrl, filename) {

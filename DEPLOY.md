@@ -79,7 +79,7 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
 
-    client_max_body_size 20m;
+    client_max_body_size 220m;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
