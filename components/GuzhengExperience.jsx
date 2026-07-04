@@ -56,7 +56,7 @@ export default function GuzhengExperience() {
   const [activeSection, setActiveSection] = useState("");
   const [aiReportReady, setAiReportReady] = useState(false);
   const [isMiniProgramView, setIsMiniProgramView] = useState(false);
-  const [isMusicPlaying, setIsMusicPlaying] = useState(true);
+  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [waveform, setWaveform] = useState(null);
   const [spectrum, setSpectrum] = useState(null);
@@ -76,6 +76,24 @@ export default function GuzhengExperience() {
 
   const clientLabel = isMiniProgramView ? "小程序" : "浏览器";
 
+  async function playMusic(audio = musicRef.current) {
+    if (!audio) return false;
+    try {
+      audio.volume = 0.32;
+      audio.loop = true;
+      if (audio.readyState === 0) audio.load();
+      await audio.play();
+      setIsMusicPlaying(true);
+      setAutoplayBlocked(false);
+      return true;
+    } catch (error) {
+      console.warn("背景音乐播放被拦截或失败。", error);
+      setIsMusicPlaying(false);
+      setAutoplayBlocked(true);
+      return false;
+    }
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setIsMiniProgramView(params.get("mp") === "1" || params.get("client") === "miniprogram");
@@ -86,33 +104,34 @@ export default function GuzhengExperience() {
     if (!audio) return;
     audio.volume = 0.32;
     audio.loop = true;
-    audio
-      .play()
-      .then(() => {
-        setIsMusicPlaying(true);
-        setAutoplayBlocked(false);
-      })
-      .catch(() => {
-        setIsMusicPlaying(false);
-        setAutoplayBlocked(true);
-      });
+    const syncPlaying = () => setIsMusicPlaying(!audio.paused && !audio.ended);
+    const syncPaused = () => setIsMusicPlaying(false);
+    const syncError = () => {
+      setIsMusicPlaying(false);
+      setAutoplayBlocked(true);
+    };
+    audio.addEventListener("play", syncPlaying);
+    audio.addEventListener("playing", syncPlaying);
+    audio.addEventListener("pause", syncPaused);
+    audio.addEventListener("ended", syncPaused);
+    audio.addEventListener("error", syncError);
+    playMusic(audio);
+    return () => {
+      audio.removeEventListener("play", syncPlaying);
+      audio.removeEventListener("playing", syncPlaying);
+      audio.removeEventListener("pause", syncPaused);
+      audio.removeEventListener("ended", syncPaused);
+      audio.removeEventListener("error", syncError);
+    };
   }, []);
 
   useEffect(() => {
     if (!autoplayBlocked) return undefined;
-    const unlockMusic = () => {
+    const unlockMusic = (event) => {
+      if (event?.target instanceof Element && event.target.closest("[data-music-toggle]")) return;
       const audio = musicRef.current;
       if (!audio) return;
-      audio
-        .play()
-        .then(() => {
-          setIsMusicPlaying(true);
-          setAutoplayBlocked(false);
-        })
-        .catch(() => {
-          setIsMusicPlaying(false);
-          setAutoplayBlocked(true);
-        });
+      playMusic(audio);
     };
     window.addEventListener("pointerdown", unlockMusic, { once: true, passive: true });
     window.addEventListener("touchstart", unlockMusic, { once: true, passive: true });
@@ -409,18 +428,12 @@ export default function GuzhengExperience() {
   async function toggleMusic() {
     const audio = musicRef.current;
     if (!audio) return;
-    if (isMusicPlaying) {
+    if (!audio.paused && !audio.ended) {
       audio.pause();
       setIsMusicPlaying(false);
       return;
     }
-    try {
-      await audio.play();
-      setIsMusicPlaying(true);
-      setAutoplayBlocked(false);
-    } catch {
-      setAutoplayBlocked(true);
-    }
+    await playMusic(audio);
   }
 
   async function refreshReportImage(download = false, options = {}) {
@@ -481,12 +494,16 @@ export default function GuzhengExperience() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#f5efd9] pb-24 text-ink md:pb-0">
-      <audio ref={musicRef} src="/bg-music.flac" preload="metadata" />
+      <audio ref={musicRef} preload="auto">
+        <source src="/bg-music.mp3" type="audio/mpeg" />
+        <source src="/bg-music.flac" type="audio/flac" />
+      </audio>
       <header
         className="fixed left-0 right-0 top-0 z-40 flex items-center justify-between px-4 py-4 transition duration-500 md:px-10 md:py-5"
       >
         <button
           type="button"
+          data-music-toggle
           onClick={toggleMusic}
           className="group flex h-12 w-12 items-center justify-center rounded-full border border-white/70 bg-white/40 text-[#5d6f45] shadow-soft backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white/55 md:h-14 md:w-14"
           aria-label={isMusicPlaying ? "暂停背景音乐" : "播放背景音乐"}
