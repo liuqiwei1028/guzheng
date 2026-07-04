@@ -8,7 +8,7 @@ export async function POST(request) {
   try {
     const { code } = await request.json();
     if (!code || typeof code !== "string") {
-      return NextResponse.json({ error: "缺少本机手机号授权 code" }, { status: 400 });
+      return NextResponse.json({ error: "缺少手机号授权 code" }, { status: 400 });
     }
 
     const phoneInfo = await getPhoneNumber(code);
@@ -32,6 +32,6 @@ export async function POST(request) {
       }),
     });
   } catch (error) {
-    return NextResponse.json({ error: error.message || "本机手机号一键登录失败" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "手机号登录失败" }, { status: 500 });
   }
 }

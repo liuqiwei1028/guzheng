@@ -50,7 +50,7 @@ Page({
   async loginWithPhone(event) {
     const detail = event.detail || {};
     if (!detail.code) {
-      this.setData({ message: detail.errMsg || "未完成本机手机号授权" });
+      this.setData({ message: detail.errMsg || "未完成手机号授权" });
       return;
     }
 
@@ -63,7 +63,7 @@ Page({
       saveSession(data);
       this.enterApp();
     } catch (error) {
-      this.setData({ message: error.message || "本机手机号一键登录失败" });
+      this.setData({ message: error.message || "手机号登录失败" });
     } finally {
       this.setData({ loadingPhone: false });
     }

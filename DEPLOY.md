@@ -136,7 +136,7 @@ pm2 restart guzheng-timbre-studio
 登录说明：
 
 - 微信登录使用小程序 `wx.login`，服务端通过微信 `code2Session` 换取 openid。
-- 本机手机号一键登录使用 `button open-type="getPhoneNumber"` 获取一次性 code，服务端换取手机号后只写入脱敏手机号和哈希，不保存原始手机号，不发送短信验证码。
+- 手机号登录使用 `button open-type="getPhoneNumber"` 获取一次性 code，服务端换取手机号后只写入脱敏手机号和哈希，不保存原始手机号。
 - 登录成功后，小程序进入 `web-view`，加载已部署的网页功能页。
 
 ## 方案二：Docker 部署
